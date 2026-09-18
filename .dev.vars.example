@@ -1,0 +1,10 @@
+# Local Wrangler secrets. Copy to `.dev.vars` and fill in real values.
+# Generate the auth secret with: openssl rand -base64 32
+
+BETTER_AUTH_SECRET="replace-me-with-a-random-secret"
+GOOGLE_CLIENT_ID=""
+GOOGLE_CLIENT_SECRET=""
+
+# Optional. When unset the OAuth base URL is derived from the request origin,
+# which keeps localhost:5173, localhost:4173 and production callbacks working.
+# BETTER_AUTH_URL="https://tracker.example.com"

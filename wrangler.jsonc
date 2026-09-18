@@ -1,0 +1,35 @@
+{
+	"$schema": "./node_modules/wrangler/config-schema.json",
+	"name": "timetracker",
+	"compatibility_date": "2026-09-18",
+	"compatibility_flags": ["nodejs_als"],
+	"main": ".svelte-kit/cloudflare/_worker.js",
+	"assets": {
+		"binding": "ASSETS",
+		"directory": ".svelte-kit/cloudflare"
+	},
+	"routes": [
+		{
+			"pattern": "timetracker.patrick.pe",
+			"custom_domain": true
+		}
+	],
+	"observability": {
+		"enabled": true
+	},
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "timetracker-db",
+			"database_id": "4d412c65-39fa-4247-a7e0-04b45a97b6fd",
+			"migrations_dir": "drizzle"
+		}
+	],
+	"vars": {
+		// Set to "true" only for the Playwright fixture. Never enable in production:
+		// it allows authenticating as an arbitrary user with a cookie.
+		"ENABLE_TEST_AUTH": "false"
+	},
+	"workers_dev": true,
+	"preview_urls": true
+}
