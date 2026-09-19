@@ -25,6 +25,10 @@
 		form?.action === 'edit' && form.sessionId === id ? (form.error ?? null) : null;
 </script>
 
+<svelte:head>
+	<title>{data.date} — Work Time Tracker</title>
+</svelte:head>
+
 <div class="page">
 	<section class="row-between">
 		<div>

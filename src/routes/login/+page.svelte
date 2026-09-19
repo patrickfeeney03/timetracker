@@ -1,67 +1,87 @@
 <script lang="ts">
-	import { page } from '$app/state';
-	import { createAuthClient } from 'better-auth/svelte';
+	import GoogleSignInButton from '$lib/components/GoogleSignInButton.svelte';
 
-	const authClient = createAuthClient();
-	const data = $derived(page.data);
+	const title = 'Work Time Tracker — a timer that lives on the server';
+	// Keep under ~160 characters: Google truncates longer snippets.
+	const description =
+		'A work-time tracker whose timer runs on the server. Close the browser, switch devices, cross timezones — your recorded time stays exact.';
 
-	let pending = $state(false);
-	let error = $state<string | null>(null);
-
-	async function continueWithGoogle() {
-		pending = true;
-		error = null;
-		try {
-			await authClient.signIn.social({ provider: 'google', callbackURL: data.redirectTo });
-		} catch {
-			error = 'Google sign-in could not be started. Check your connection and try again.';
-			pending = false;
+	const features = [
+		{
+			title: 'The timer lives on the server',
+			body: 'Start on your laptop, check it from your phone. Closing the browser never stops or loses a running timer.'
+		},
+		{
+			title: 'Intervals are the source of truth',
+			body: 'Daily totals are always derived from exact UTC timestamps, never stored — so your history can never drift.'
+		},
+		{
+			title: 'Timezone-safe history',
+			body: 'Every session keeps the timezone it was recorded in. Travel never moves past work to another day, and midnight crossings are split at real local midnight.'
+		},
+		{
+			title: 'One timer, every device',
+			body: 'A single running timer per account, enforced by the database even when two devices race. Other devices catch up on focus, no WebSockets needed.'
 		}
-	}
+	];
+
+	const structuredData = JSON.stringify({
+		'@context': 'https://schema.org',
+		'@type': 'WebApplication',
+		name: 'Work Time Tracker',
+		url: 'https://timetracker.patrick.pe/login',
+		applicationCategory: 'BusinessApplication',
+		operatingSystem: 'Any',
+		browserRequirements: 'Requires JavaScript',
+		description,
+		offers: { '@type': 'Offer', price: 0, priceCurrency: 'USD' }
+	});
+
+	// Built by concatenation so neither the Svelte compiler nor the lint parser
+	// mistakes the JSON-LD wrapper for a real script element.
+	const jsonLdOpen = '<' + 'script type="application/ld+json">';
+	const jsonLdClose = '<' + '/' + 'script>';
 </script>
 
-<div class="page page-narrow">
-	<div class="card login-card">
-		<div>
-			<div class="brand">Work Time Tracker</div>
-			<p class="muted" style="margin-bottom: 0;">
-				Track focused time. The timer runs on the server, so closing the browser never stops it.
+<svelte:head>
+	<title>{title}</title>
+	<meta name="description" content={description} />
+	<link rel="canonical" href="https://timetracker.patrick.pe/login" />
+	<meta property="og:url" content="https://timetracker.patrick.pe/login" />
+	<meta property="og:title" content={title} />
+	<meta property="og:description" content={description} />
+	<meta name="twitter:title" content={title} />
+	<meta name="twitter:description" content={description} />
+	<!-- eslint-disable-next-line svelte/no-at-html-tags -- trusted, locally built JSON-LD -->
+	{@html `${jsonLdOpen}${structuredData}${jsonLdClose}`}
+</svelte:head>
+
+<div class="landing">
+	<section class="landing-hero">
+		<div class="landing-hero-inner">
+			<h1>Work Time Tracker</h1>
+			<p class="landing-tagline">
+				A timer that lives on the server — close the tab, switch devices, cross timezones. Your
+				recorded time stays exact.
+			</p>
+			<GoogleSignInButton testid="google-sign-in" />
+			<p class="landing-privacy">
+				Free to use. Google sign-in requests only your name, email and profile image.
 			</p>
 		</div>
+	</section>
 
-		<button
-			class="btn btn-primary btn-large btn-block"
-			onclick={continueWithGoogle}
-			disabled={pending}
-			data-testid="google-sign-in"
-		>
-			<svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
-				<path
-					fill="#4285F4"
-					d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62Z"
-				/>
-				<path
-					fill="#34A853"
-					d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.8.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.03-3.7H.96v2.33A9 9 0 0 0 9 18Z"
-				/>
-				<path
-					fill="#FBBC05"
-					d="M3.97 10.72a5.4 5.4 0 0 1 0-3.44V4.95H.96a9 9 0 0 0 0 8.1l3.01-2.33Z"
-				/>
-				<path
-					fill="#EA4335"
-					d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.59A9 9 0 0 0 .96 4.95l3.01 2.33C4.68 5.16 6.66 3.58 9 3.58Z"
-				/>
-			</svg>
-			{pending ? 'Redirecting to Google…' : 'Continue with Google'}
-		</button>
+	<section class="landing-features">
+		<h2>Why it works</h2>
+		<div class="landing-grid">
+			{#each features as feature (feature.title)}
+				<article class="card landing-card">
+					<h3>{feature.title}</h3>
+					<p class="muted">{feature.body}</p>
+				</article>
+			{/each}
+		</div>
+	</section>
 
-		{#if error}
-			<p class="message message-error" role="alert">{error}</p>
-		{/if}
-
-		<p class="muted small" style="margin: 0;">
-			Only your basic Google identity is requested: name, email address and profile image.
-		</p>
-	</div>
+	<footer class="landing-footer">Personal project</footer>
 </div>

@@ -42,6 +42,10 @@
 	});
 </script>
 
+<svelte:head>
+	<title>Today — Work Time Tracker</title>
+</svelte:head>
+
 <div class="page">
 	<section class="row-between">
 		<div>

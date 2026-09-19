@@ -52,6 +52,19 @@
 	<link rel="icon" href={favicon} />
 	<meta name="viewport" content="width=device-width, initial-scale=1" />
 	<meta name="theme-color" content="#0d1015" />
+
+	<title>Work Time Tracker</title>
+
+	<!-- Site-wide social defaults only. Page-specific tags (title, description,
+		canonical, og:title/og:description/og:url, twitter title/description) live
+		in each page's svelte:head: Svelte dedupes <title> but renders duplicate
+		<meta> tags, and most scrapers honor the first occurrence. -->
+	<meta property="og:site_name" content="Work Time Tracker" />
+	<meta property="og:type" content="website" />
+	<meta property="og:image" content="https://timetracker.patrick.pe/og-image.png" />
+	<meta property="og:image:alt" content="Work Time Tracker — a timer that lives on the server" />
+	<meta name="twitter:card" content="summary_large_image" />
+	<meta name="twitter:image" content="https://timetracker.patrick.pe/og-image.png" />
 </svelte:head>
 
 <div class="app-shell">

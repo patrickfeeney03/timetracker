@@ -559,18 +559,119 @@ a:focus-visible {
 	border-radius: var(--radius);
 }
 
-/* Login ---------------------------------------------------------------- */
+/* Landing -------------------------------------------------------------- */
 
-.login-card {
+.landing {
+	flex: 1;
+	width: 100%;
 	display: flex;
 	flex-direction: column;
-	gap: 1.25rem;
-	text-align: center;
-	align-items: stretch;
 }
 
-.login-card .brand {
-	font-size: 1.4rem;
+.landing-hero {
+	padding: clamp(3.5rem, 10vw, 7rem) 1.25rem clamp(2.5rem, 6vw, 4rem);
+	text-align: center;
+	background: radial-gradient(ellipse 70% 100% at 50% 0%, var(--accent-soft), transparent 65%);
+}
+
+.landing-hero-inner {
+	max-width: 40rem;
+	margin: 0 auto;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 1.1rem;
+}
+
+.landing-hero h1 {
+	font-size: clamp(2.2rem, 6vw, 3.25rem);
+	letter-spacing: -0.03em;
+}
+
+.landing-tagline {
+	margin: 0;
+	max-width: 34rem;
+	font-size: clamp(1rem, 2.4vw, 1.2rem);
+	line-height: 1.55;
+	color: var(--muted);
+}
+
+.landing-privacy {
+	margin: 0;
+	color: var(--faint);
+	font-size: 0.85rem;
+}
+
+.signin-google {
+	/* Optical alignment: leading icon, so trim the icon-side padding a touch. */
+	padding-inline-start: calc(1.4rem - 2px);
+}
+
+.landing-features {
+	width: 100%;
+	max-width: 960px;
+	margin: 0 auto;
+	padding: 1rem 1.25rem 3rem;
+}
+
+.landing-features h2 {
+	font-size: clamp(1.4rem, 3.5vw, 1.9rem);
+	margin-bottom: 1.25rem;
+}
+
+.landing-grid {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 1rem;
+}
+
+.landing-card {
+	display: flex;
+	flex-direction: column;
+	gap: 0.5rem;
+	transition:
+		transform 200ms var(--ease-out),
+		box-shadow 200ms var(--ease-out),
+		border-color 200ms var(--ease-out);
+}
+
+.landing-card:hover {
+	transform: translateY(-2px);
+	border-color: var(--border-strong);
+	box-shadow:
+		var(--shadow),
+		0 0 0 3px var(--accent-soft);
+}
+
+.landing-card h3 {
+	font-size: 1.05rem;
+}
+
+.landing-card p {
+	margin: 0;
+	font-size: 0.925rem;
+	line-height: 1.55;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.landing-card {
+		transition: none;
+	}
+
+	.landing-card:hover {
+		transform: none;
+	}
+}
+
+.landing-footer {
+	width: 100%;
+	max-width: 960px;
+	margin: 0 auto;
+	padding: 1.5rem 1.25rem 2.5rem;
+	border-top: 1px solid var(--border);
+	color: var(--faint);
+	font-size: 0.85rem;
+	text-align: center;
 }
 
 /* Utility -------------------------------------------------------------- */
@@ -590,6 +691,19 @@ a:focus-visible {
 @media (max-width: 560px) {
 	.page {
 		padding: 1rem 0.9rem 3rem;
+	}
+
+	.landing-hero {
+		padding: 2.5rem 1rem 2rem;
+	}
+
+	.landing-features {
+		padding-left: 0.9rem;
+		padding-right: 0.9rem;
+	}
+
+	.landing-grid {
+		grid-template-columns: minmax(0, 1fr);
 	}
 
 	.field-grid {

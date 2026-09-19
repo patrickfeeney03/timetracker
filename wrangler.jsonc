@@ -30,6 +30,6 @@
 		// it allows authenticating as an arbitrary user with a cookie.
 		"ENABLE_TEST_AUTH": "false"
 	},
-	"workers_dev": true,
+	"workers_dev": false,
 	"preview_urls": true
 }
