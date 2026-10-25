@@ -1,5 +1,7 @@
+import { getRequestEvent } from '$app/server';
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
+import { sveltekitCookies } from 'better-auth/svelte-kit';
 import * as schema from './db/schema';
 import { getDb } from './db';
 
@@ -53,7 +55,17 @@ export function createAuth(env: AuthEnv, origin?: string) {
 		trustedOrigins: origin ? [origin] : [],
 		session: {
 			expiresIn: 60 * 60 * 24 * 30,
-			updateAge: 60 * 60 * 24
-		}
+			updateAge: 60 * 60 * 24,
+			// A signed cookie carries the session and user for 15 minutes, so most
+			// requests skip the two sequential D1 lookups. Revoking a session takes
+			// up to that long to apply on devices that already hold the cookie.
+			cookieCache: {
+				enabled: true,
+				maxAge: 15 * 60
+			}
+		},
+		// `auth.api.getSession` in hooks refreshes the cache cookie once it
+		// expires; this forwards those Set-Cookie headers to the response.
+		plugins: [sveltekitCookies(getRequestEvent)]
 	});
 }
