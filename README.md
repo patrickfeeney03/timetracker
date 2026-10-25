@@ -19,8 +19,9 @@ a full-stack Cloudflare Worker with Static Assets, D1 and Better Auth (Google OA
   calendar of daily totals.
 - `/history/[date]` — every session contributing to a date, with add, edit and
   delete controls at minute precision.
-- Refreshes authoritative state after mutations, when the tab regains focus and
-  every 30 seconds, so another device's changes appear without WebSockets.
+- Refreshes authoritative state after mutations and when the tab regains focus
+  or becomes visible, so another device's changes appear without WebSockets or
+  background polling.
 - Failed writes never change local timer state and show an actionable retry message.
 - Only one running timer per user, guaranteed by a partial unique index even when
   two devices race.

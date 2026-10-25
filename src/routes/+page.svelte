@@ -15,8 +15,9 @@
 	onMount(() => {
 		let inFlight = false;
 
-		// Poll and focus-refresh keep multiple devices in sync without
-		// WebSockets: every refresh replaces the authoritative server snapshot.
+		// Refreshing when the tab regains focus keeps multiple devices in sync
+		// without WebSockets or a background poll that would wake the Worker for
+		// nothing: every refresh replaces the authoritative server snapshot.
 		const refresh = async () => {
 			if (document.visibilityState === 'hidden' || inFlight) return;
 			inFlight = true;
@@ -32,12 +33,10 @@
 
 		document.addEventListener('visibilitychange', onVisible);
 		window.addEventListener('focus', onVisible);
-		const interval = setInterval(refresh, 30_000);
 
 		return () => {
 			document.removeEventListener('visibilitychange', onVisible);
 			window.removeEventListener('focus', onVisible);
-			clearInterval(interval);
 		};
 	});
 </script>
