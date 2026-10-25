@@ -1,5 +1,5 @@
 import { building } from '$app/environment';
-import { createAuth } from '$lib/server/auth';
+import { getAuth } from '$lib/server/auth';
 import { getDb } from '$lib/server/db';
 import { user as userTable } from '$lib/server/db/schema';
 import { decideNavigation } from '$lib/server/navigation';
@@ -17,7 +17,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 	}
 
 	const origin = event.url.origin;
-	const auth = createAuth(env, origin);
+	const auth = getAuth(env, origin);
 	event.locals.auth = auth;
 	event.locals.user = null;
 	event.locals.session = null;

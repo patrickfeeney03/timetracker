@@ -5,7 +5,7 @@ import { sveltekitCookies } from 'better-auth/svelte-kit';
 import * as schema from './db/schema';
 import { getDb } from './db';
 
-/** The request-scoped Better Auth instance stored in `event.locals.auth`. */
+/** The Better Auth instance stored in `event.locals.auth`. */
 export type Auth = ReturnType<typeof createAuth>;
 
 /**
@@ -24,14 +24,33 @@ export type AuthEnv = {
 
 const TEST_AUTH_SECRET = 'test-only-secret-enabled-by-ENABLE_TEST_AUTH';
 
+const instances = new Map<string, Auth>();
+
 /**
- * Builds a request-scoped Better Auth instance. D1 bindings are only available
- * through `platform.env`, so the instance is created per request and wired to
- * the Drizzle schema. When `BETTER_AUTH_URL` is not set, the base URL is the
- * origin of the incoming request, which keeps local, preview and production
- * OAuth callbacks working without hardcoding hosts.
+ * Returns the Better Auth instance for `origin`, building it on first use.
+ * Bindings and secrets are fixed for the lifetime of a Worker isolate, so the
+ * instance (and its setup cost) is shared by every request the isolate serves.
+ * Better Auth copies its context per call, so no request state leaks between
+ * requests. Keyed by origin because the base URL and trusted origins derive
+ * from it: localhost, preview URLs and the custom domain each get their own.
  */
-export function createAuth(env: AuthEnv, origin?: string) {
+export function getAuth(env: AuthEnv, origin: string): Auth {
+	let auth = instances.get(origin);
+	if (!auth) {
+		auth = createAuth(env, origin);
+		instances.set(origin, auth);
+	}
+	return auth;
+}
+
+/**
+ * Builds a Better Auth instance wired to the Drizzle schema. D1 bindings are
+ * only available through `platform.env`, so it cannot be built at module load.
+ * When `BETTER_AUTH_URL` is not set, the base URL is the origin of the incoming
+ * request, which keeps local, preview and production OAuth callbacks working
+ * without hardcoding hosts.
+ */
+function createAuth(env: AuthEnv, origin?: string) {
 	const baseURL = env.BETTER_AUTH_URL || origin;
 	const secret =
 		env.BETTER_AUTH_SECRET || (env.ENABLE_TEST_AUTH === 'true' ? TEST_AUTH_SECRET : undefined);
