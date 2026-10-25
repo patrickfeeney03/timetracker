@@ -125,6 +125,13 @@ describe('pauseTimer', () => {
 		if (again.ok) expect(again.session).toBeNull();
 	});
 
+	it('never ends a session before it started when the clock jumps backwards', async () => {
+		await startTimer(context(USER_A, BASE), 'UTC');
+		const paused = await pauseTimer(context(USER_A, BASE - 5_000));
+		if (!paused.ok) throw new Error('expected ok');
+		expect(paused.session?.endedAt).toBe(BASE);
+	});
+
 	it('never pauses another user\u2019s timer', async () => {
 		await startTimer(context(USER_A), 'UTC');
 		const paused = await pauseTimer(context(USER_B, BASE + 1_000));

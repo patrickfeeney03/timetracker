@@ -1,5 +1,4 @@
 import { error, fail } from '@sveltejs/kit';
-import { getDb } from '$lib/server/db';
 import { getActiveSession, listSessionsOverlapping } from '$lib/server/db/sessions';
 import { requireUser } from '$lib/server/guards';
 import { addManualSession, editSession, removeSession } from '$lib/server/sessions/service';
@@ -20,7 +19,7 @@ export const load: PageServerLoad = async ({ params, locals, platform, cookies }
 	const user = requireUser(locals);
 	if (!isValidDate(params.date)) error(404, 'That date is not valid.');
 
-	const db = getDb(platform!.env.DB);
+	const db = locals.db;
 	const nowMs = Date.now();
 	const deviceTimeZone = readDeviceTimeZone(cookies, platform?.cf?.timezone);
 	const date = params.date;
@@ -90,9 +89,9 @@ function readManualInput(data: FormData) {
 }
 
 export const actions: Actions = {
-	add: async ({ request, locals, platform }) => {
+	add: async ({ request, locals }) => {
 		const user = requireUser(locals);
-		const db = getDb(platform!.env.DB);
+		const db = locals.db;
 		const result = await addManualSession(
 			{ db, userId: user.id, nowMs: Date.now() },
 			readManualInput(await request.formData())
@@ -108,9 +107,9 @@ export const actions: Actions = {
 		return { action: 'add', success: true };
 	},
 
-	edit: async ({ request, locals, platform }) => {
+	edit: async ({ request, locals }) => {
 		const user = requireUser(locals);
-		const db = getDb(platform!.env.DB);
+		const db = locals.db;
 		const data = await request.formData();
 		const sessionId = String(data.get('sessionId') ?? '');
 
@@ -135,9 +134,9 @@ export const actions: Actions = {
 		return { action: 'edit', success: true, sessionId };
 	},
 
-	delete: async ({ request, locals, platform }) => {
+	delete: async ({ request, locals }) => {
 		const user = requireUser(locals);
-		const db = getDb(platform!.env.DB);
+		const db = locals.db;
 		const data = await request.formData();
 		const sessionId = String(data.get('sessionId') ?? '');
 

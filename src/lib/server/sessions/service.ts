@@ -7,7 +7,8 @@ import {
 import type { Db } from '../db';
 import {
 	insertSession,
-	getActiveSession,
+	insertOrGetActiveSession,
+	endActiveSession,
 	getSession,
 	findOverlappingSession,
 	updateSession,
@@ -49,45 +50,27 @@ export async function startTimer(
 		};
 	}
 
-	const existing = await getActiveSession(context.db, context.userId);
-	if (existing) return { ok: true, session: existing };
-
+	// One statement, so starting costs a single round trip to the primary and
+	// never acts on a read a lagging replica could have served.
 	const { db, userId, nowMs } = context;
-	try {
-		const session = await insertSession(db, {
-			id: crypto.randomUUID(),
-			userId,
-			startedAt: nowMs,
-			endedAt: null,
-			timeZone,
-			createdAt: nowMs,
-			updatedAt: nowMs
-		});
-		return { ok: true, session };
-	} catch (error) {
-		// Two devices can race here. The partial unique index allows only one
-		// running timer, so the loser of the race adopts the winner's session.
-		if (isUniqueViolation(error)) {
-			const active = await getActiveSession(db, userId);
-			if (active) return { ok: true, session: active };
-		}
-		throw error;
-	}
+	const session = await insertOrGetActiveSession(db, {
+		id: crypto.randomUUID(),
+		userId,
+		startedAt: nowMs,
+		endedAt: null,
+		timeZone,
+		createdAt: nowMs,
+		updatedAt: nowMs
+	});
+	return { ok: true, session };
 }
 
 /** Pauses the running timer using a server timestamp. */
 export async function pauseTimer(
 	context: Context
 ): Promise<ServiceResult<{ session: WorkSession | null }>> {
-	const active = await getActiveSession(context.db, context.userId);
-	if (!active) return { ok: true, session: null };
-
-	// Clamp so a clock that jumped backwards can never produce negative time.
-	const endedAt = Math.max(context.nowMs, active.startedAt);
-	const session = await updateSession(context.db, context.userId, active.id, {
-		endedAt,
-		updatedAt: context.nowMs
-	});
+	// One statement for the same reasons as `startTimer`.
+	const session = await endActiveSession(context.db, context.userId, context.nowMs);
 	return { ok: true, session: session ?? null };
 }
 
@@ -240,15 +223,4 @@ function overlapError(
 		field: 'start',
 		message: `This overlaps an existing session (${range}). Edit that session first.`
 	};
-}
-
-function isUniqueViolation(error: unknown): boolean {
-	// Drizzle wraps D1 errors, so walk the cause chain and check each message.
-	let current: unknown = error;
-	for (let depth = 0; current && depth < 5; depth++) {
-		const message = current instanceof Error ? current.message : String(current);
-		if (/unique constraint failed/i.test(message)) return true;
-		current = current instanceof Error ? (current as { cause?: unknown }).cause : undefined;
-	}
-	return false;
 }

@@ -12,6 +12,8 @@ declare global {
 
 		interface Locals {
 			auth: import('$lib/server/auth').Auth;
+			/** Request-scoped D1 session; see `hooks.server.ts`. */
+			db: import('$lib/server/db').Db;
 			user: SessionUser | null;
 			session: SessionRecord | null;
 		}

@@ -8,6 +8,8 @@ import { redirect, type Handle, type HandleServerError } from '@sveltejs/kit';
 import { svelteKitHandler } from 'better-auth/svelte-kit';
 import { eq } from 'drizzle-orm';
 
+const D1_BOOKMARK_COOKIE = 'd1_bookmark';
+
 export const handle: Handle = async ({ event, resolve }) => {
 	if (building) return resolve(event);
 
@@ -21,6 +23,16 @@ export const handle: Handle = async ({ event, resolve }) => {
 	event.locals.auth = auth;
 	event.locals.user = null;
 	event.locals.session = null;
+
+	// Reads go to the nearest D1 read replica. Form actions start on the primary
+	// so their checks see the latest data, and they hand the browser a bookmark
+	// so the reload that follows a write reads from a replica at least that
+	// fresh. Writes always go to the primary.
+	const isWrite = event.request.method !== 'GET' && event.request.method !== 'HEAD';
+	const d1 = env.DB.withSession(
+		isWrite ? 'first-primary' : (event.cookies.get(D1_BOOKMARK_COOKIE) ?? 'first-unconstrained')
+	);
+	event.locals.db = getDb(d1);
 
 	// Playwright fixture: ENABLE_TEST_AUTH is "false" in wrangler.jsonc and is
 	// only overridden by the e2e dev server. It lets tests authenticate without
@@ -68,7 +80,20 @@ export const handle: Handle = async ({ event, resolve }) => {
 		redirect(303, '/');
 	}
 
-	return svelteKitHandler({ auth, event, resolve, building });
+	const response = await svelteKitHandler({ auth, event, resolve, building });
+
+	const bookmark = isWrite ? d1.getBookmark() : null;
+	if (bookmark) {
+		// `event.cookies` is already applied once `resolve` returns, so append
+		// the header directly. Replicas catch up within seconds; a short life
+		// keeps a stale bookmark from pinning reads for long.
+		const secure = event.url.protocol === 'https:' ? '; Secure' : '';
+		response.headers.append(
+			'set-cookie',
+			`${D1_BOOKMARK_COOKIE}=${encodeURIComponent(bookmark)}; Path=/; Max-Age=300; HttpOnly; SameSite=Lax${secure}`
+		);
+	}
+	return response;
 };
 
 /**

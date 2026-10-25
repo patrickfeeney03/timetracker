@@ -1,5 +1,4 @@
 import { fail } from '@sveltejs/kit';
-import { getDb } from '$lib/server/db';
 import { getActiveSession, listSessionsOverlapping } from '$lib/server/db/sessions';
 import { requireUser } from '$lib/server/guards';
 import { pauseTimer, startTimer } from '$lib/server/sessions/service';
@@ -19,7 +18,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 export const load: PageServerLoad = async ({ locals, platform, cookies, url }) => {
 	const user = requireUser(locals);
-	const db = getDb(platform!.env.DB);
+	const db = locals.db;
 	const nowMs = Date.now();
 	const deviceTimeZone = readDeviceTimeZone(cookies, platform?.cf?.timezone);
 	const todayKey = formatDateInTimeZone(nowMs, deviceTimeZone);
@@ -68,9 +67,9 @@ export const load: PageServerLoad = async ({ locals, platform, cookies, url }) =
 
 export const actions: Actions = {
 	/** Starts the timer with a server timestamp. Idempotent while running. */
-	start: async ({ request, locals, platform }) => {
+	start: async ({ request, locals }) => {
 		const user = requireUser(locals);
-		const db = getDb(platform!.env.DB);
+		const db = locals.db;
 		const data = await request.formData();
 		const timeZone = String(data.get('timeZone') ?? '');
 
@@ -89,9 +88,9 @@ export const actions: Actions = {
 	},
 
 	/** Pauses the running timer with a server timestamp. */
-	pause: async ({ locals, platform }) => {
+	pause: async ({ locals }) => {
 		const user = requireUser(locals);
-		const db = getDb(platform!.env.DB);
+		const db = locals.db;
 		const result = await pauseTimer({ db, userId: user.id, nowMs: Date.now() });
 		if (!result.ok) {
 			return fail(500, { action: 'pause', error: result.message, retryable: true });

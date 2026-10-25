@@ -1,4 +1,4 @@
-import { and, asc, eq, gt, isNull, lt, ne, or } from 'drizzle-orm';
+import { and, asc, eq, gt, isNull, lt, ne, or, sql } from 'drizzle-orm';
 import type { Db } from './index';
 import { workSession } from './schema';
 
@@ -51,6 +51,45 @@ export function getSession(
 export async function insertSession(db: Db, values: WorkSessionInsert): Promise<WorkSession> {
 	const rows = await db.insert(workSession).values(values).returning();
 	return rows[0]!;
+}
+
+/**
+ * Inserts `values` as the user's running session, or returns the one already
+ * running, in a single statement. The partial unique index allows one running
+ * session per user; on conflict the no-op update makes RETURNING yield the
+ * existing row, even when two devices race.
+ */
+export async function insertOrGetActiveSession(
+	db: Db,
+	values: WorkSessionInsert
+): Promise<WorkSession> {
+	const rows = await db
+		.insert(workSession)
+		.values(values)
+		.onConflictDoUpdate({
+			target: workSession.userId,
+			targetWhere: isNull(workSession.endedAt),
+			set: { updatedAt: sql`${workSession.updatedAt}` }
+		})
+		.returning();
+	return rows[0]!;
+}
+
+/**
+ * Ends the user's running session, if any, in a single statement. The end is
+ * clamped so a clock that jumped backwards can never produce negative time.
+ */
+export async function endActiveSession(
+	db: Db,
+	userId: string,
+	nowMs: number
+): Promise<WorkSession | undefined> {
+	const rows = await db
+		.update(workSession)
+		.set({ endedAt: sql`max(${nowMs}, ${workSession.startedAt})`, updatedAt: nowMs })
+		.where(and(eq(workSession.userId, userId), isNull(workSession.endedAt)))
+		.returning();
+	return rows[0];
 }
 
 export async function updateSession(
