@@ -66,6 +66,7 @@ export const load: PageServerLoad = async ({ params, locals, platform, cookies }
 		date,
 		deviceTimeZone,
 		isToday,
+		timerRunning: activeSession !== undefined,
 		totalMs,
 		entries,
 		previousDate: shiftDate(date, -1),

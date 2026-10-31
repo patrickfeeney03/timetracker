@@ -50,6 +50,7 @@ export const load: PageServerLoad = async ({ locals, platform, cookies, url }) =
 		deviceTimeZone,
 		todayKey,
 		todayTotalMs: summaries.get(todayKey)?.durationMs ?? 0,
+		timerRunning: activeSession !== undefined,
 		activeSession: activeSession
 			? {
 					id: activeSession.id,

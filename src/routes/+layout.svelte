@@ -1,6 +1,7 @@
 <script lang="ts">
 	import '../app.css';
 	import favicon from '$lib/assets/favicon.svg';
+	import faviconRunning from '$lib/assets/favicon-running.svg';
 	import { resolve } from '$app/paths';
 	import { goto, invalidateAll } from '$app/navigation';
 	import { page } from '$app/state';
@@ -15,6 +16,8 @@
 	const user = $derived(page.data.user);
 	const serverTimeZone = $derived(page.data.deviceTimeZone);
 	const isLogin = $derived(page.url.pathname === '/login');
+	// A background tab shows at a glance whether time is being counted.
+	const icon = $derived(page.data.timerRunning ? faviconRunning : favicon);
 
 	onMount(() => {
 		// Keep the server in sync with the device's current IANA timezone. It is
@@ -49,7 +52,7 @@
 </script>
 
 <svelte:head>
-	<link rel="icon" href={favicon} />
+	<link rel="icon" href={icon} />
 	<meta name="viewport" content="width=device-width, initial-scale=1" />
 	<meta name="theme-color" content="#0d1015" />
 

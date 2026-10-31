@@ -17,6 +17,11 @@ declare global {
 			user: SessionUser | null;
 			session: SessionRecord | null;
 		}
+
+		interface PageData {
+			/** Set by pages that already query the active session; drives the favicon. */
+			timerRunning?: boolean;
+		}
 	}
 }
 

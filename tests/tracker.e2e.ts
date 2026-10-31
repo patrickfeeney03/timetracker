@@ -56,6 +56,30 @@ test('a running timer survives a reload and holds its value when paused', async 
 	expect(Math.abs(afterPause - beforePause)).toBeLessThanOrEqual(1);
 });
 
+test('the favicon shows whether the timer is running', async ({ page }) => {
+	await signIn(page);
+	await page.goto('/');
+	const favicon = page.locator('link[rel="icon"]');
+	const stoppedIcon = (await favicon.getAttribute('href')) ?? '';
+	expect(stoppedIcon).not.toBe('');
+
+	await page.getByTestId('start-button').click();
+	await expect(page.getByTestId('pause-button')).toBeVisible();
+	await expect(favicon).not.toHaveAttribute('href', stoppedIcon);
+	const runningIcon = (await favicon.getAttribute('href')) ?? '';
+
+	// Server-rendered pages, history included, pick the same icon.
+	await page.reload();
+	await expect(favicon).toHaveAttribute('href', runningIcon);
+	await page.goto('/history/2020-01-01');
+	await expect(favicon).toHaveAttribute('href', runningIcon);
+
+	await page.goto('/');
+	await page.getByTestId('pause-button').click();
+	await expect(page.getByTestId('start-button')).toHaveText('Resume');
+	await expect(favicon).toHaveAttribute('href', stoppedIcon);
+});
+
 test('time accumulates across start/pause cycles within the same day', async ({ page }) => {
 	await signIn(page);
 	await page.goto('/');
