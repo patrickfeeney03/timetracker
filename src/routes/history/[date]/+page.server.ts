@@ -1,6 +1,8 @@
 import { error, fail } from '@sveltejs/kit';
 import { getActiveSession, listSessionsOverlapping } from '$lib/server/db/sessions';
+import { listTagLinksOverlapping, listTags } from '$lib/server/db/tags';
 import { requireUser } from '$lib/server/guards';
+import { readLabels } from '$lib/server/sessions/form';
 import { addManualSession, editSession, removeSession } from '$lib/server/sessions/service';
 import { readDeviceTimeZone } from '$lib/server/timezone';
 import {
@@ -29,10 +31,13 @@ export const load: PageServerLoad = async ({ params, locals, platform, cookies }
 	const queryFromMs = dayStartMs - 2 * DAY_MS;
 	const queryToMs = dayStartMs + 3 * DAY_MS;
 
-	const [overlapping, activeSession] = await Promise.all([
+	const [overlapping, activeSession, tags, tagLinks] = await Promise.all([
 		listSessionsOverlapping(db, user.id, queryFromMs, queryToMs),
-		getActiveSession(db, user.id)
+		getActiveSession(db, user.id),
+		listTags(db, user.id),
+		listTagLinksOverlapping(db, user.id, queryFromMs, queryToMs)
 	]);
+	const tagsById = new Map(tags.map((tag) => [tag.id, tag]));
 
 	const intervals =
 		activeSession && !overlapping.some((session) => session.id === activeSession.id)
@@ -49,6 +54,12 @@ export const load: PageServerLoad = async ({ params, locals, platform, cookies }
 				startedAt: interval.startedAt,
 				endedAt: interval.endedAt,
 				timeZone: interval.timeZone,
+				name: interval.name,
+				tags: tagLinks
+					.filter((link) => link.sessionId === interval.id)
+					.map((link) => tagsById.get(link.tagId))
+					.filter((tag) => tag !== undefined)
+					.sort((a, b) => a.name.localeCompare(b.name)),
 				startLocal,
 				endLocal: interval.endedAt === null ? null : endLocal,
 				durationMs,
@@ -69,6 +80,7 @@ export const load: PageServerLoad = async ({ params, locals, platform, cookies }
 		timerRunning: activeSession !== undefined,
 		totalMs,
 		entries,
+		tags,
 		previousDate: shiftDate(date, -1),
 		nextDate: shiftDate(date, 1),
 		addDefaults: {
@@ -83,6 +95,7 @@ export const load: PageServerLoad = async ({ params, locals, platform, cookies }
 
 function readManualInput(data: FormData) {
 	return {
+		...readLabels(data),
 		startLocal: String(data.get('start') ?? ''),
 		endLocal: String(data.get('end') ?? ''),
 		timeZone: String(data.get('timeZone') ?? '')

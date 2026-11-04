@@ -6,8 +6,16 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { getPlatformProxy } from 'wrangler';
 import { getDb, type Db } from '$lib/server/db';
 import { listSessionsOverlapping } from '$lib/server/db/sessions';
-import { user as userTable, workSession } from '$lib/server/db/schema';
-import { addManualSession, editSession, pauseTimer, removeSession, startTimer } from './service';
+import { tag, user as userTable, workSession, workSessionTag } from '$lib/server/db/schema';
+import { listTags } from '$lib/server/db/tags';
+import {
+	addManualSession,
+	editSession,
+	pauseTimer,
+	removeSession,
+	startTimer,
+	updateSessionLabels
+} from './service';
 
 /**
  * Integration tests against a real D1 database running in Miniflare through
@@ -60,7 +68,20 @@ afterAll(async () => {
 
 beforeEach(async () => {
 	await db.delete(workSession);
+	await db.delete(tag);
 });
+
+/** Names of the tags on a session, alphabetically. */
+async function tagNamesOf(sessionId: string): Promise<string[]> {
+	const rows = await db
+		.select({ name: tag.name })
+		.from(workSessionTag)
+		.innerJoin(tag, eq(tag.id, workSessionTag.tagId))
+		.where(eq(workSessionTag.sessionId, sessionId));
+	return rows.map((row) => row.name).sort();
+}
+
+const newTags = (names: string, tagIds: string[] = []) => ({ tags: { tagIds, newTags: names } });
 
 describe('startTimer', () => {
 	it('creates a running session with the captured timezone', async () => {
@@ -81,6 +102,31 @@ describe('startTimer', () => {
 		expect(second.session.id).toBe(first.session.id);
 		expect(second.session.startedAt).toBe(BASE);
 		expect(second.session.timeZone).toBe('America/New_York');
+	});
+
+	it('stores a trimmed name, and blank as unnamed', async () => {
+		const named = await startTimer(context(USER_A), 'UTC', { name: '  Writing docs  ' });
+		if (!named.ok) throw new Error(named.message);
+		expect(named.session.name).toBe('Writing docs');
+
+		await pauseTimer(context(USER_A, BASE + 1_000));
+		const blank = await startTimer(context(USER_A, BASE + 2_000), 'UTC', { name: '   ' });
+		if (!blank.ok) throw new Error(blank.message);
+		expect(blank.session.name).toBeNull();
+	});
+
+	it('rejects an overlong name without starting', async () => {
+		const result = await startTimer(context(USER_A), 'UTC', { name: 'x'.repeat(201) });
+		expect(result.ok).toBe(false);
+		if (!result.ok) expect(result.field).toBe('name');
+		expect(await db.select().from(workSession)).toHaveLength(0);
+	});
+
+	it('keeps the running session’s name on a repeated start', async () => {
+		await startTimer(context(USER_A), 'UTC', { name: 'First' });
+		const again = await startTimer(context(USER_A, BASE + 1_000), 'UTC', { name: 'Second' });
+		if (!again.ok) throw new Error(again.message);
+		expect(again.session.name).toBe('First');
 	});
 
 	it('rejects an unknown timezone', async () => {
@@ -125,6 +171,30 @@ describe('pauseTimer', () => {
 		if (again.ok) expect(again.session).toBeNull();
 	});
 
+	it('saves a submitted name on pause and keeps the name when none is sent', async () => {
+		await startTimer(context(USER_A, BASE), 'UTC', { name: 'Before' });
+		const renamed = await pauseTimer(context(USER_A, BASE + 1_000), { name: 'After' });
+		if (!renamed.ok) throw new Error(renamed.message);
+		expect(renamed.session?.name).toBe('After');
+
+		await startTimer(context(USER_A, BASE + 2_000), 'UTC', { name: 'Kept' });
+		const kept = await pauseTimer(context(USER_A, BASE + 3_000));
+		if (!kept.ok) throw new Error(kept.message);
+		expect(kept.session?.name).toBe('Kept');
+	});
+
+	it('does not pause when the submitted name is invalid', async () => {
+		await startTimer(context(USER_A, BASE), 'UTC');
+		const result = await pauseTimer(context(USER_A, BASE + 1_000), { name: 'x'.repeat(201) });
+		expect(result.ok).toBe(false);
+
+		const active = await db
+			.select()
+			.from(workSession)
+			.where(and(eq(workSession.userId, USER_A), isNull(workSession.endedAt)));
+		expect(active).toHaveLength(1);
+	});
+
 	it('never ends a session before it started when the clock jumps backwards', async () => {
 		await startTimer(context(USER_A, BASE), 'UTC');
 		const paused = await pauseTimer(context(USER_A, BASE - 5_000));
@@ -160,6 +230,16 @@ describe('addManualSession', () => {
 		);
 		if (!result.ok) throw new Error(result.message);
 		expect(result.session.endedAt! - result.session.startedAt).toBe(90 * 60_000);
+		expect(result.session.name).toBeNull();
+	});
+
+	it('stores an optional name', async () => {
+		const result = await addManualSession(context(USER_A), {
+			...input('2026-09-18T09:00', '2026-09-18T10:00'),
+			name: ' Planning '
+		});
+		if (!result.ok) throw new Error(result.message);
+		expect(result.session.name).toBe('Planning');
 	});
 
 	it('rejects invalid input without writing anything', async () => {
@@ -233,6 +313,28 @@ describe('editSession', () => {
 		if (!edited.ok) throw new Error(edited.message);
 		expect(edited.session.startedAt).toBe(Date.parse('2026-09-18T08:00:00Z'));
 		expect(edited.session.endedAt).toBe(Date.parse('2026-09-18T10:30:00Z'));
+	});
+
+	it('sets and clears the name', async () => {
+		const added = await addManualSession(context(USER_A), {
+			...input('2026-09-18T09:00', '2026-09-18T10:00'),
+			name: 'Original'
+		});
+		if (!added.ok) throw new Error(added.message);
+
+		const renamed = await editSession(context(USER_A), added.session.id, {
+			...input('2026-09-18T09:00', '2026-09-18T10:00'),
+			name: 'Renamed'
+		});
+		if (!renamed.ok) throw new Error(renamed.message);
+		expect(renamed.session.name).toBe('Renamed');
+
+		const cleared = await editSession(context(USER_A), added.session.id, {
+			...input('2026-09-18T09:00', '2026-09-18T10:00'),
+			name: ''
+		});
+		if (!cleared.ok) throw new Error(cleared.message);
+		expect(cleared.session.name).toBeNull();
 	});
 
 	it('refuses sessions owned by another user', async () => {
@@ -310,6 +412,171 @@ describe('editSession', () => {
 		expect(edited.session.startedAt).toBe(Date.parse('2026-01-01T00:30:00Z'));
 		expect(edited.session.endedAt).toBe(Date.parse('2026-01-01T01:30:00Z'));
 		expect(edited.session.timeZone).toBe('America/New_York');
+	});
+});
+
+describe('updateSessionLabels', () => {
+	it('renames the running session without pausing it', async () => {
+		const started = await startTimer(context(USER_A, BASE), 'UTC');
+		if (!started.ok) throw new Error(started.message);
+
+		const renamed = await updateSessionLabels(context(USER_A, BASE + 1_000), started.session.id, {
+			name: 'Deep work'
+		});
+		if (!renamed.ok) throw new Error(renamed.message);
+		expect(renamed.session.name).toBe('Deep work');
+		expect(renamed.session.endedAt).toBeNull();
+		expect(renamed.session.startedAt).toBe(BASE);
+	});
+
+	it('clears a name when given blank input', async () => {
+		const started = await startTimer(context(USER_A), 'UTC', { name: 'Temporary' });
+		if (!started.ok) throw new Error(started.message);
+
+		const cleared = await updateSessionLabels(context(USER_A), started.session.id, { name: '  ' });
+		if (!cleared.ok) throw new Error(cleared.message);
+		expect(cleared.session.name).toBeNull();
+	});
+
+	it('refuses sessions owned by another user', async () => {
+		const started = await startTimer(context(USER_A), 'UTC', { name: 'Mine' });
+		if (!started.ok) throw new Error(started.message);
+
+		const result = await updateSessionLabels(context(USER_B), started.session.id, {
+			name: 'Theirs'
+		});
+		expect(result.ok).toBe(false);
+		const rows = await db.select().from(workSession);
+		expect(rows[0]!.name).toBe('Mine');
+	});
+});
+
+describe('tags', () => {
+	it('creates new tags on start and links them to the new session', async () => {
+		const started = await startTimer(context(USER_A), 'UTC', newTags('reading, coding'));
+		if (!started.ok) throw new Error(started.message);
+
+		expect(await tagNamesOf(started.session.id)).toEqual(['coding', 'reading']);
+		expect((await listTags(db, USER_A)).map((row) => row.name)).toEqual(['coding', 'reading']);
+	});
+
+	it('reuses an existing tag by name regardless of case', async () => {
+		const first = await addManualSession(context(USER_A), {
+			startLocal: '2026-09-18T08:00',
+			endLocal: '2026-09-18T09:00',
+			timeZone: 'UTC',
+			...newTags('Coding')
+		});
+		const second = await addManualSession(context(USER_A), {
+			startLocal: '2026-09-18T09:00',
+			endLocal: '2026-09-18T10:00',
+			timeZone: 'UTC',
+			...newTags('coding')
+		});
+		if (!first.ok || !second.ok) throw new Error('setup failed');
+
+		const tags = await listTags(db, USER_A);
+		expect(tags.map((row) => row.name)).toEqual(['Coding']);
+		expect(await tagNamesOf(second.session.id)).toEqual(['Coding']);
+	});
+
+	it('links picked tags by id and ignores ids owned by another user', async () => {
+		await startTimer(context(USER_B), 'UTC', newTags('secret'));
+		await pauseTimer(context(USER_B, BASE + 1_000));
+		await startTimer(context(USER_A), 'UTC', newTags('reading'));
+		await pauseTimer(context(USER_A, BASE + 1_000));
+		const [mine] = await listTags(db, USER_A);
+		const [theirs] = await listTags(db, USER_B);
+
+		const started = await startTimer(context(USER_A, BASE + 2_000), 'UTC', {
+			tags: { tagIds: [mine!.id, theirs!.id], newTags: '' }
+		});
+		if (!started.ok) throw new Error(started.message);
+		expect(await tagNamesOf(started.session.id)).toEqual(['reading']);
+	});
+
+	it('does not retag the running session on a repeated start', async () => {
+		const first = await startTimer(context(USER_A), 'UTC', newTags('reading'));
+		await startTimer(context(USER_A, BASE + 1_000), 'UTC', newTags('coding'));
+		if (!first.ok) throw new Error(first.message);
+		expect(await tagNamesOf(first.session.id)).toEqual(['reading']);
+	});
+
+	it('replaces, keeps and clears tags on the running session', async () => {
+		const started = await startTimer(context(USER_A), 'UTC', newTags('reading'));
+		if (!started.ok) throw new Error(started.message);
+		const id = started.session.id;
+
+		await updateSessionLabels(context(USER_A), id, newTags('coding'));
+		expect(await tagNamesOf(id)).toEqual(['coding']);
+
+		// No tag field means the tags are left alone.
+		await updateSessionLabels(context(USER_A), id, { name: 'Renamed' });
+		expect(await tagNamesOf(id)).toEqual(['coding']);
+
+		await updateSessionLabels(context(USER_A), id, newTags(''));
+		expect(await tagNamesOf(id)).toEqual([]);
+	});
+
+	it('saves submitted tags when pausing, and keeps them when none are sent', async () => {
+		const first = await startTimer(context(USER_A, BASE), 'UTC', newTags('reading'));
+		const paused = await pauseTimer(context(USER_A, BASE + 1_000), newTags('coding'));
+		if (!first.ok || !paused.ok) throw new Error('setup failed');
+		expect(paused.session?.endedAt).toBe(BASE + 1_000);
+		expect(await tagNamesOf(first.session.id)).toEqual(['coding']);
+
+		const second = await startTimer(context(USER_A, BASE + 2_000), 'UTC', newTags('reading'));
+		await pauseTimer(context(USER_A, BASE + 3_000));
+		if (!second.ok) throw new Error(second.message);
+		expect(await tagNamesOf(second.session.id)).toEqual(['reading']);
+	});
+
+	it('edits tags with the rest of a finished session', async () => {
+		const added = await addManualSession(context(USER_A), {
+			startLocal: '2026-09-18T09:00',
+			endLocal: '2026-09-18T10:00',
+			timeZone: 'UTC',
+			...newTags('reading')
+		});
+		if (!added.ok) throw new Error(added.message);
+
+		const edited = await editSession(context(USER_A), added.session.id, {
+			startLocal: '2026-09-18T09:00',
+			endLocal: '2026-09-18T11:00',
+			timeZone: 'UTC',
+			...newTags('coding, notes')
+		});
+		if (!edited.ok) throw new Error(edited.message);
+		expect(await tagNamesOf(added.session.id)).toEqual(['coding', 'notes']);
+	});
+
+	it('rejects invalid tags without writing anything', async () => {
+		const result = await startTimer(context(USER_A), 'UTC', newTags('x'.repeat(41)));
+		expect(result.ok).toBe(false);
+		if (!result.ok) expect(result.field).toBe('tags');
+		expect(await db.select().from(workSession)).toHaveLength(0);
+		expect(await listTags(db, USER_A)).toHaveLength(0);
+	});
+
+	it('drops links but keeps the tag when a session is deleted', async () => {
+		const added = await addManualSession(context(USER_A), {
+			startLocal: '2026-09-18T09:00',
+			endLocal: '2026-09-18T10:00',
+			timeZone: 'UTC',
+			...newTags('reading')
+		});
+		if (!added.ok) throw new Error(added.message);
+
+		await removeSession(context(USER_A), added.session.id);
+		expect(await db.select().from(workSessionTag)).toHaveLength(0);
+		expect(await listTags(db, USER_A)).toHaveLength(1);
+	});
+
+	it('lets each user have a tag with the same name', async () => {
+		await startTimer(context(USER_A), 'UTC', newTags('reading'));
+		await startTimer(context(USER_B), 'UTC', newTags('reading'));
+		expect(await listTags(db, USER_A)).toHaveLength(1);
+		expect(await listTags(db, USER_B)).toHaveLength(1);
 	});
 });
 

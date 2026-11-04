@@ -1,7 +1,9 @@
 import { fail } from '@sveltejs/kit';
 import { getActiveSession, listSessionsOverlapping } from '$lib/server/db/sessions';
+import { listActiveTagLinks, listTags } from '$lib/server/db/tags';
 import { requireUser } from '$lib/server/guards';
-import { pauseTimer, startTimer } from '$lib/server/sessions/service';
+import { readLabels } from '$lib/server/sessions/form';
+import { pauseTimer, startTimer, updateSessionLabels } from '$lib/server/sessions/service';
 import { readDeviceTimeZone } from '$lib/server/timezone';
 import {
 	epochMsToLocalDateTime,
@@ -33,9 +35,11 @@ export const load: PageServerLoad = async ({ locals, platform, cookies, url }) =
 	const queryFromMs = Date.parse(`${gridDates[0]}T00:00:00Z`) - 2 * DAY_MS;
 	const queryToMs = Date.parse(`${gridDates[gridDates.length - 1]}T00:00:00Z`) + 3 * DAY_MS;
 
-	const [monthSessions, activeSession] = await Promise.all([
+	const [monthSessions, activeSession, tags, activeTagLinks] = await Promise.all([
 		listSessionsOverlapping(db, user.id, queryFromMs, queryToMs),
-		getActiveSession(db, user.id)
+		getActiveSession(db, user.id),
+		listTags(db, user.id),
+		listActiveTagLinks(db, user.id)
 	]);
 
 	const intervals =
@@ -55,9 +59,14 @@ export const load: PageServerLoad = async ({ locals, platform, cookies, url }) =
 			? {
 					id: activeSession.id,
 					startedLocal: epochMsToLocalDateTime(activeSession.startedAt, activeSession.timeZone),
-					timeZone: activeSession.timeZone
+					timeZone: activeSession.timeZone,
+					name: activeSession.name,
+					tagIds: activeTagLinks
+						.filter((link) => link.sessionId === activeSession.id)
+						.map((link) => link.tagId)
 				}
 			: null,
+		tags,
 		month,
 		previousMonth: shiftMonth(month, -1),
 		nextMonth: shiftMonth(month, 1),
@@ -81,21 +90,61 @@ export const actions: Actions = {
 			});
 		}
 
-		const result = await startTimer({ db, userId: user.id, nowMs: Date.now() }, timeZone);
-		if (!result.ok) {
-			return fail(500, { action: 'start', error: result.message, retryable: true });
-		}
+		const result = await startTimer(
+			{ db, userId: user.id, nowMs: Date.now() },
+			timeZone,
+			readLabels(data)
+		);
+		if (!result.ok) return labelFailure('start', result);
 		return { action: 'start', success: true };
 	},
 
-	/** Pauses the running timer with a server timestamp. */
-	pause: async ({ locals }) => {
+	/**
+	 * Pauses the running timer with a server timestamp. The name and tags share
+	 * a form with Pause, so unsaved edits are kept rather than lost.
+	 */
+	pause: async ({ request, locals }) => {
 		const user = requireUser(locals);
 		const db = locals.db;
-		const result = await pauseTimer({ db, userId: user.id, nowMs: Date.now() });
-		if (!result.ok) {
-			return fail(500, { action: 'pause', error: result.message, retryable: true });
-		}
+		const result = await pauseTimer(
+			{ db, userId: user.id, nowMs: Date.now() },
+			readLabels(await request.formData())
+		);
+		if (!result.ok) return labelFailure('pause', result);
 		return { action: 'pause', success: true };
+	},
+
+	/** Saves the running session's name and tags without pausing it. */
+	rename: async ({ request, locals }) => {
+		const user = requireUser(locals);
+		const db = locals.db;
+		const data = await request.formData();
+		const sessionId = String(data.get('sessionId') ?? '');
+		if (!sessionId) {
+			return fail(400, { action: 'rename', error: 'Missing session id.', field: 'form' });
+		}
+
+		const result = await updateSessionLabels(
+			{ db, userId: user.id, nowMs: Date.now() },
+			sessionId,
+			readLabels(data)
+		);
+		if (!result.ok) return labelFailure('rename', result);
+		return { action: 'rename', success: true };
 	}
 };
+
+/**
+ * Invalid names or tags are the user's to fix; anything else on start or pause
+ * is a server problem worth retrying.
+ */
+function labelFailure(action: string, result: { message: string; field?: string }) {
+	const invalidInput = result.field === 'name' || result.field === 'tags';
+	const status = invalidInput ? 400 : action === 'rename' ? 409 : 500;
+	return fail(status, {
+		action,
+		error: result.message,
+		field: result.field,
+		retryable: !invalidInput && action !== 'rename'
+	});
+}

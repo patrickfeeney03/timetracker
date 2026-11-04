@@ -1,4 +1,10 @@
 import {
+	normalizeSessionName,
+	normalizeTagSelection,
+	type LabelError,
+	type TagSelection
+} from '$lib/labels';
+import {
 	epochMsToLocalDateTime,
 	formatDateInTimeZone,
 	isTimeZone,
@@ -16,16 +22,33 @@ import {
 	type WorkSession
 } from '../db/sessions';
 
-export type ServiceErrorField = 'start' | 'end' | 'timeZone' | 'form';
+export type ServiceErrorField = 'start' | 'end' | 'timeZone' | 'name' | 'tags' | 'form';
 
 export type ServiceResult<T> =
 	({ ok: true } & T) | { ok: false; message: string; field?: ServiceErrorField };
 
-export type ManualSessionInput = {
+/**
+ * Raw name and tag fields from a form. A field left `undefined` keeps the
+ * session's current value (or none, for a new session).
+ */
+export type LabelInput = {
+	/** Blank means unnamed. */
+	name?: string;
+	tags?: {
+		/** Picked existing tags. */
+		tagIds: string[];
+		/** Comma-separated names to reuse or create. */
+		newTags: string;
+	};
+};
+
+export type ManualSessionInput = LabelInput & {
 	startLocal: string;
 	endLocal: string;
 	timeZone: string;
 };
+
+type Labels = { name?: string | null; tags?: TagSelection };
 
 type Context = {
 	db: Db;
@@ -37,10 +60,14 @@ type Context = {
 	nowMs: number;
 };
 
-/** Starts the timer, or returns the already-running one (idempotent). */
+/**
+ * Starts the timer, or returns the already-running one (idempotent). When a
+ * timer is already running, its name and tags are left alone.
+ */
 export async function startTimer(
 	context: Context,
-	timeZone: string
+	timeZone: string,
+	input: LabelInput = {}
 ): Promise<ServiceResult<{ session: WorkSession }>> {
 	if (!isTimeZone(timeZone)) {
 		return {
@@ -49,29 +76,70 @@ export async function startTimer(
 			message: 'Your device timezone is not recognised. Refresh the page and try again.'
 		};
 	}
+	const labels = validateLabels(input);
+	if (!labels.ok) return labels;
 
-	// One statement, so starting costs a single round trip to the primary and
-	// never acts on a read a lagging replica could have served.
+	// One round trip to the primary that never acts on a read a lagging replica
+	// could have served: a single statement, batched with any tag writes.
 	const { db, userId, nowMs } = context;
-	const session = await insertOrGetActiveSession(db, {
-		id: crypto.randomUUID(),
-		userId,
-		startedAt: nowMs,
-		endedAt: null,
-		timeZone,
-		createdAt: nowMs,
-		updatedAt: nowMs
-	});
+	const session = await insertOrGetActiveSession(
+		db,
+		{
+			id: crypto.randomUUID(),
+			userId,
+			startedAt: nowMs,
+			endedAt: null,
+			timeZone,
+			name: labels.name ?? null,
+			createdAt: nowMs,
+			updatedAt: nowMs
+		},
+		labels.tags
+	);
 	return { ok: true, session };
 }
 
-/** Pauses the running timer using a server timestamp. */
+/**
+ * Pauses the running timer using a server timestamp. Submitted labels are
+ * saved on the session being ended; omitted ones are kept.
+ */
 export async function pauseTimer(
-	context: Context
+	context: Context,
+	input: LabelInput = {}
 ): Promise<ServiceResult<{ session: WorkSession | null }>> {
-	// One statement for the same reasons as `startTimer`.
-	const session = await endActiveSession(context.db, context.userId, context.nowMs);
+	const labels = validateLabels(input);
+	if (!labels.ok) return labels;
+
+	// One round trip for the same reasons as `startTimer`.
+	const session = await endActiveSession(context.db, context.userId, context.nowMs, labels);
 	return { ok: true, session: session ?? null };
+}
+
+/** Renames or retags any owned session, including the running one. */
+export async function updateSessionLabels(
+	context: Context,
+	sessionId: string,
+	input: LabelInput
+): Promise<ServiceResult<{ session: WorkSession }>> {
+	const labels = validateLabels(input);
+	if (!labels.ok) return labels;
+
+	// Owner-checked writes with no read first, so no replica can be stale.
+	const session = await updateSession(
+		context.db,
+		context.userId,
+		sessionId,
+		{ ...(labels.name !== undefined && { name: labels.name }), updatedAt: context.nowMs },
+		labels.tags
+	);
+	if (!session) {
+		return {
+			ok: false,
+			field: 'form',
+			message: 'That session no longer exists. Refresh the page.'
+		};
+	}
+	return { ok: true, session };
 }
 
 /** Adds a finished session from minute-level local input. */
@@ -91,15 +159,20 @@ export async function addManualSession(
 	if (overlap) return overlapError(overlap, input.timeZone);
 
 	const { db, userId, nowMs } = context;
-	const session = await insertSession(db, {
-		id: crypto.randomUUID(),
-		userId,
-		startedAt: validated.startMs,
-		endedAt: validated.endMs,
-		timeZone: input.timeZone,
-		createdAt: nowMs,
-		updatedAt: nowMs
-	});
+	const session = await insertSession(
+		db,
+		{
+			id: crypto.randomUUID(),
+			userId,
+			startedAt: validated.startMs,
+			endedAt: validated.endMs,
+			timeZone: input.timeZone,
+			name: validated.labels.name ?? null,
+			createdAt: nowMs,
+			updatedAt: nowMs
+		},
+		validated.labels.tags
+	);
 	return { ok: true, session };
 }
 
@@ -137,12 +210,20 @@ export async function editSession(
 	);
 	if (overlap) return overlapError(overlap, input.timeZone);
 
-	const session = await updateSession(context.db, context.userId, sessionId, {
-		startedAt: validated.startMs,
-		endedAt: validated.endMs,
-		timeZone: input.timeZone,
-		updatedAt: context.nowMs
-	});
+	const { name, tags } = validated.labels;
+	const session = await updateSession(
+		context.db,
+		context.userId,
+		sessionId,
+		{
+			startedAt: validated.startMs,
+			endedAt: validated.endMs,
+			timeZone: input.timeZone,
+			...(name !== undefined && { name }),
+			updatedAt: context.nowMs
+		},
+		tags
+	);
 	if (!session) {
 		return {
 			ok: false,
@@ -172,7 +253,7 @@ export async function removeSession(
 function validateManualInput(
 	input: ManualSessionInput
 ):
-	| { ok: true; startMs: number; endMs: number }
+	| { ok: true; startMs: number; endMs: number; labels: Labels }
 	| { ok: false; message: string; field?: ServiceErrorField } {
 	if (!isTimeZone(input.timeZone)) {
 		return {
@@ -196,7 +277,25 @@ function validateManualInput(
 		return { ok: false, field: 'end', message: 'The end time must be after the start time.' };
 	}
 
-	return { ok: true, startMs, endMs };
+	const labels = validateLabels(input);
+	if (!labels.ok) return labels;
+
+	return { ok: true, startMs, endMs, labels };
+}
+
+function validateLabels(input: LabelInput): ({ ok: true } & Labels) | LabelError {
+	const labels: { ok: true } & Labels = { ok: true };
+	if (input.name !== undefined) {
+		const named = normalizeSessionName(input.name);
+		if (!named.ok) return named;
+		labels.name = named.name;
+	}
+	if (input.tags !== undefined) {
+		const tagged = normalizeTagSelection(input.tags.tagIds, input.tags.newTags);
+		if (!tagged.ok) return tagged;
+		labels.tags = tagged.selection;
+	}
+	return labels;
 }
 
 function overlapError(

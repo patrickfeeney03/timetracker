@@ -11,6 +11,13 @@ export type ActiveSessionView = {
 	/** Minute-precision start in the session's recorded zone (`YYYY-MM-DDTHH:mm`). */
 	startedLocal: string;
 	timeZone: string;
+	name: string | null;
+	tagIds: string[];
+};
+
+export type TagView = {
+	id: string;
+	name: string;
 };
 
 export type SessionEntry = {
@@ -18,6 +25,8 @@ export type SessionEntry = {
 	startedAt: number;
 	endedAt: number | null;
 	timeZone: string;
+	name: string | null;
+	tags: TagView[];
 	startLocal: string;
 	endLocal: string | null;
 	durationMs: number;

@@ -105,6 +105,86 @@ test('time accumulates across start/pause cycles within the same day', async ({ 
 	expect(second).toBeGreaterThanOrEqual(first + 1);
 });
 
+test('names a session when starting, renames it while running and keeps it in history', async ({
+	page
+}) => {
+	await signIn(page);
+	await page.goto('/');
+
+	await page.getByTestId('session-name').fill('Inbox zero');
+	await page.getByTestId('session-name').press('Enter');
+	await expect(page.getByTestId('pause-button')).toBeVisible();
+	await expect(page.getByTestId('session-name')).toHaveValue('Inbox zero');
+
+	// Enter saves the new name without pausing the timer.
+	await page.getByTestId('session-name').fill('Release notes');
+	await page.getByTestId('session-name').press('Enter');
+	await expect(page.getByTestId('rename-button')).toBeDisabled();
+	await expect(page.getByTestId('pause-button')).toBeVisible();
+	await page.reload();
+	await expect(page.getByTestId('session-name')).toHaveValue('Release notes');
+
+	// An unsaved edit is kept when pausing.
+	await page.getByTestId('session-name').fill('Release notes v2');
+	await page.getByTestId('pause-button').click();
+	await expect(page.getByTestId('start-button')).toHaveText('Resume');
+	await expect(page.getByTestId('session-name')).toHaveValue('');
+
+	const today = await page
+		.getByTestId('calendar-day')
+		.and(page.locator('.is-today'))
+		.getAttribute('data-date');
+	await page.goto(`/history/${today}`);
+	await expect(page.getByTestId('session-item').getByTestId('session-name')).toHaveText(
+		'Release notes v2'
+	);
+});
+
+test('creates tags, reuses them across sessions and shows them in history', async ({ page }) => {
+	await signIn(page);
+	await page.goto('/');
+
+	await page.getByTestId('timer-new-tag').fill('reading');
+	await page.getByTestId('start-button').click();
+	await expect(page.getByTestId('pause-button')).toBeVisible();
+	await expect(page.getByRole('checkbox', { name: 'reading' })).toBeChecked();
+
+	// Swap tags on the running session without pausing it.
+	await page.getByRole('checkbox', { name: 'reading' }).uncheck();
+	await page.getByTestId('timer-new-tag').fill('coding');
+	await page.getByTestId('timer-new-tag').press('Enter');
+	await expect(page.getByTestId('rename-button')).toBeDisabled();
+	await expect(page.getByRole('checkbox', { name: 'coding' })).toBeChecked();
+	await expect(page.getByRole('checkbox', { name: 'reading' })).not.toBeChecked();
+	await expect(page.getByTestId('timer-new-tag')).toHaveValue('');
+	await expect(page.getByTestId('pause-button')).toBeVisible();
+
+	await page.getByTestId('pause-button').click();
+	await expect(page.getByTestId('start-button')).toHaveText('Resume');
+
+	// Both tags are now reusable, and typing an existing name reuses it.
+	await expect(page.getByTestId('tag-option')).toHaveText(['coding', 'reading']);
+	await page.getByRole('checkbox', { name: 'reading' }).check();
+	await page.getByTestId('timer-new-tag').fill('Coding');
+	await page.getByTestId('start-button').click();
+	await expect(page.getByTestId('pause-button')).toBeVisible();
+	await expect(page.getByTestId('tag-option')).toHaveCount(2);
+	await expect(page.getByRole('checkbox', { name: 'coding' })).toBeChecked();
+	await expect(page.getByRole('checkbox', { name: 'reading' })).toBeChecked();
+	await page.getByTestId('pause-button').click();
+	await expect(page.getByTestId('start-button')).toHaveText('Resume');
+
+	const today = await page
+		.getByTestId('calendar-day')
+		.and(page.locator('.is-today'))
+		.getAttribute('data-date');
+	await page.goto(`/history/${today}`);
+	const items = page.getByTestId('session-item');
+	await expect(items).toHaveCount(2);
+	await expect(items.nth(0).getByTestId('session-tag')).toHaveText(['coding']);
+	await expect(items.nth(1).getByTestId('session-tag')).toHaveText(['coding', 'reading']);
+});
+
 test('a second device sees the running timer after focus refresh', async ({ browser }) => {
 	const email = uniqueEmail('multi-device');
 	const contextA = await browser.newContext();
@@ -195,6 +275,7 @@ test('adds, corrects and deletes a session with minute precision', async ({ page
 	await page.goto('/history/2026-09-10');
 	await expect(page.getByTestId('empty-state')).toBeVisible();
 
+	await page.getByTestId('add-name').fill('Standup');
 	await page.getByTestId('add-start').fill('2026-09-10T09:00');
 	await page.getByTestId('add-end').fill('2026-09-10T10:30');
 	await page.getByTestId('add-timezone').fill('UTC');
@@ -202,14 +283,18 @@ test('adds, corrects and deletes a session with minute precision', async ({ page
 
 	await expect(page.getByTestId('session-item')).toHaveCount(1);
 	await expect(page.getByTestId('day-total')).toHaveText('1h 30m');
+	await expect(page.getByTestId('session-item')).toContainText('Standup');
 
 	await page.getByTestId('edit-session').click();
 	await expect(page.getByTestId('session-form-edit')).toBeVisible();
+	await expect(page.getByTestId('edit-name')).toHaveValue('Standup');
+	await page.getByTestId('edit-name').fill('Planning');
 	await page.getByTestId('edit-end').fill('2026-09-10T11:00');
 	await page.getByTestId('edit-submit').click();
 
 	await expect(page.getByTestId('day-total')).toHaveText('2h 0m');
 	await expect(page.getByTestId('session-item')).toContainText('09:00 – 11:00');
+	await expect(page.getByTestId('session-item')).toContainText('Planning');
 
 	page.once('dialog', (dialog) => dialog.accept());
 	await page.getByTestId('delete-session').click();

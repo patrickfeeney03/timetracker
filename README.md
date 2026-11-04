@@ -19,6 +19,11 @@ a full-stack Cloudflare Worker with Static Assets, D1 and Better Auth (Google OA
   calendar of daily totals.
 - `/history/[date]` — every session contributing to a date, with add, edit and
   delete controls at minute precision.
+- Every session (each start/pause interval) can have an optional free-text name and
+  any number of reusable tags such as `reading` or `coding`. Tags are created by
+  typing a new name (comma-separated for several) and then appear as toggle chips.
+  Names and tags can be set before starting, changed while the timer runs (Save,
+  or Enter) and edited in history. Unsaved changes are kept when you pause.
 - Refreshes authoritative state after mutations and when the tab regains focus
   or becomes visible, so another device's changes appear without WebSockets or
   background polling.
@@ -154,13 +159,19 @@ type WorkSession = {
 	startedAt: number; // UTC epoch milliseconds
 	endedAt: number | null; // null means running
 	timeZone: string; // IANA zone captured at start
+	name: string | null; // optional label, null means unnamed
 	createdAt: number;
 	updatedAt: number;
 };
+
+type Tag = { id: string; userId: string; name: string; createdAt: number };
+type WorkSessionTag = { sessionId: string; tagId: string }; // many-to-many
 ```
 
 Indexes: `(user_id, started_at)`, `(user_id, ended_at)` and a partial unique index on
 `user_id WHERE ended_at IS NULL` that guarantees at most one running timer per user.
+Tags are unique per user on `lower(name)`, so typing `Coding` reuses `coding`.
+Deleting a session drops its tag links; the tags themselves stay.
 
 ### Timer rules
 
@@ -168,6 +179,9 @@ Indexes: `(user_id, started_at)`, `(user_id, ended_at)` and a partial unique ind
   devices race, the partial unique index lets one win and the other adopts the winner's
   session.
 - `pause` updates only the authenticated user's active row using a server timestamp.
+- Name and tag changes travel in the same D1 batch as the session write, so start,
+  pause and save stay one atomic round trip. Tag links are inserted through a join on
+  the session's owner, so tag ids from another user are silently ignored.
 - Add/edit accept minute-level local input plus an explicit IANA timezone, and reject
   unknown timezones, non-positive durations and any overlap with another session
   (a running timer counts as open-ended). Running sessions must be paused before they
@@ -201,5 +215,5 @@ Indexes: `(user_id, started_at)`, `(user_id, ended_at)` and a partial unique ind
 
 ## Out of scope for v1
 
-Projects/tags, multiple simultaneous timers, offline starts or pauses, reminders,
+Renaming, merging or deleting tags, per-tag totals, multiple simultaneous timers, offline starts or pauses, reminders,
 Obsidian/CSV export, team features and direct daily-total overrides.

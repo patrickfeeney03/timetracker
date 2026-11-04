@@ -18,6 +18,25 @@ describe('SessionForm.svelte', () => {
 		await expect.element(page.getByTestId('add-start')).toHaveValue('2026-09-18T09:00');
 		await expect.element(page.getByTestId('add-end')).toHaveValue('2026-09-18T10:30');
 		await expect.element(page.getByTestId('add-timezone')).toHaveValue('Europe/Berlin');
+		await expect.element(page.getByTestId('add-name')).toHaveValue('');
+	});
+
+	it('prefills an existing name when editing', async () => {
+		await render(SessionForm, {
+			...baseProps,
+			mode: 'edit',
+			sessionId: 'session-1',
+			name: 'Code review',
+			tags: [
+				{ id: 'tag-coding', name: 'coding' },
+				{ id: 'tag-reading', name: 'reading' }
+			],
+			tagIds: ['tag-coding']
+		});
+
+		await expect.element(page.getByTestId('edit-name')).toHaveValue('Code review');
+		await expect.element(page.getByRole('checkbox', { name: 'coding' })).toBeChecked();
+		await expect.element(page.getByRole('checkbox', { name: 'reading' })).not.toBeChecked();
 	});
 
 	it('renders server validation errors and keeps the form usable for retry', async () => {

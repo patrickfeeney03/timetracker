@@ -304,7 +304,8 @@ button {
 	gap: 0.35rem;
 }
 
-.field label {
+.field label,
+.field .field-label {
 	font-size: 0.85rem;
 	color: var(--muted);
 	font-weight: 550;
@@ -392,6 +393,95 @@ a:focus-visible {
 
 .timer-display.is-paused {
 	color: color-mix(in srgb, var(--text) 82%, transparent);
+}
+
+.timer-form {
+	display: flex;
+	flex-direction: column;
+	gap: 0.75rem;
+}
+
+.name-row {
+	display: flex;
+	gap: 0.5rem;
+}
+
+/* Tags ----------------------------------------------------------------- */
+
+.tag-picker,
+.tag-list {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.4rem;
+}
+
+.tag-list {
+	list-style: none;
+	margin: 0.3rem 0 0;
+	padding: 0;
+}
+
+.tag-chip {
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+	border: 1px solid var(--border-strong);
+	border-radius: 999px;
+	padding: 0.2rem 0.7rem;
+	font-size: 0.85rem;
+	font-weight: 550;
+	color: var(--muted);
+	background: transparent;
+	cursor: pointer;
+	user-select: none;
+	transition:
+		background-color 150ms ease,
+		border-color 150ms ease,
+		color 150ms ease;
+}
+
+.tag-chip:hover {
+	border-color: var(--accent);
+}
+
+/* The checkbox stays focusable and keyboard-toggleable, just invisible. */
+.tag-chip input {
+	position: absolute;
+	inset: 0;
+	margin: 0;
+	opacity: 0;
+	cursor: pointer;
+}
+
+.tag-chip:has(input:checked) {
+	background: var(--accent-soft);
+	border-color: var(--accent);
+	color: var(--accent);
+}
+
+.tag-chip:has(input:focus-visible) {
+	outline: 2px solid var(--accent);
+	outline-offset: 1px;
+}
+
+.tag-chip.is-static {
+	cursor: default;
+	padding: 0.05rem 0.55rem;
+	font-size: 0.75rem;
+	background: var(--accent-soft);
+	border-color: transparent;
+	color: var(--accent);
+}
+
+input[type='text'].tag-new {
+	flex: 1 1 10rem;
+	width: auto;
+	min-width: 8rem;
+	border-style: dashed;
+	border-radius: 999px;
+	padding: 0.2rem 0.7rem;
+	font-size: 0.85rem;
 }
 
 .timer-meta {
@@ -526,9 +616,20 @@ a:focus-visible {
 	border-radius: var(--radius);
 }
 
+.session-name {
+	font-weight: 600;
+	overflow-wrap: anywhere;
+}
+
 .session-time {
 	font-variant-numeric: tabular-nums;
 	font-weight: 600;
+}
+
+.session-time.is-secondary {
+	font-weight: 500;
+	font-size: 0.9rem;
+	color: var(--muted);
 }
 
 .session-duration {

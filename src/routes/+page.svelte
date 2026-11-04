@@ -59,6 +59,7 @@
 		todayTotalMs={data.todayTotalMs}
 		serverNow={data.serverNow}
 		deviceTimeZone={data.deviceTimeZone}
+		tags={data.tags}
 		{form}
 	/>
 

@@ -6,6 +6,10 @@ import TimerControls from './TimerControls.svelte';
 const base = {
 	serverNow: Date.now(),
 	deviceTimeZone: 'Europe/Berlin',
+	tags: [
+		{ id: 'tag-coding', name: 'coding' },
+		{ id: 'tag-reading', name: 'reading' }
+	],
 	form: null
 };
 
@@ -35,7 +39,9 @@ describe('TimerControls.svelte', () => {
 			active: {
 				id: 'session-1',
 				startedLocal: '2026-09-18T09:41',
-				timeZone: 'Asia/Tokyo'
+				timeZone: 'Asia/Tokyo',
+				name: null,
+				tagIds: []
 			},
 			todayTotalMs: 3_600_000
 		});
@@ -46,6 +52,78 @@ describe('TimerControls.svelte', () => {
 		await expect
 			.element(page.getByText('This session keeps its original timezone'))
 			.toBeInTheDocument();
+	});
+
+	it('offers an optional name before starting', async () => {
+		await render(TimerControls, { ...base, active: null, todayTotalMs: 0 });
+
+		const name = page.getByTestId('session-name');
+		await expect.element(name).toHaveValue('');
+		await expect.element(name).toHaveAttribute('name', 'name');
+		await expect.element(page.getByTestId('rename-button')).not.toBeInTheDocument();
+	});
+
+	it('shows the running session’s name and only enables Save after an edit', async () => {
+		await render(TimerControls, {
+			...base,
+			active: {
+				id: 'session-1',
+				startedLocal: '2026-09-18T09:41',
+				timeZone: 'Europe/Berlin',
+				name: 'Quarterly report',
+				tagIds: ['tag-reading']
+			},
+			todayTotalMs: 60_000
+		});
+
+		const name = page.getByTestId('session-name');
+		const save = page.getByTestId('rename-button');
+		await expect.element(name).toHaveValue('Quarterly report');
+		await expect.element(save).toBeDisabled();
+
+		await name.fill('Quarterly report draft');
+		await expect.element(save).toBeEnabled();
+
+		// Whitespace-only changes are not a rename.
+		await name.fill('  Quarterly report ');
+		await expect.element(save).toBeDisabled();
+	});
+
+	it('ticks the running session’s tags and enables Save when they change', async () => {
+		await render(TimerControls, {
+			...base,
+			active: {
+				id: 'session-1',
+				startedLocal: '2026-09-18T09:41',
+				timeZone: 'Europe/Berlin',
+				name: null,
+				tagIds: ['tag-reading']
+			},
+			todayTotalMs: 60_000
+		});
+
+		const reading = page.getByRole('checkbox', { name: 'reading' });
+		const coding = page.getByRole('checkbox', { name: 'coding' });
+		const save = page.getByTestId('rename-button');
+		await expect.element(reading).toBeChecked();
+		await expect.element(coding).not.toBeChecked();
+		await expect.element(save).toBeDisabled();
+
+		await coding.click();
+		await expect.element(save).toBeEnabled();
+		await coding.click();
+		await expect.element(save).toBeDisabled();
+
+		await page.getByTestId('timer-new-tag').fill('notes');
+		await expect.element(save).toBeEnabled();
+	});
+
+	it('offers existing tags and a new-tag field before starting', async () => {
+		await render(TimerControls, { ...base, active: null, todayTotalMs: 0 });
+
+		await expect.element(page.getByRole('checkbox', { name: 'coding' })).not.toBeChecked();
+		await expect.element(page.getByRole('checkbox', { name: 'reading' })).not.toBeChecked();
+		await expect.element(page.getByTestId('timer-new-tag')).toHaveValue('');
 	});
 
 	it('surfaces a retryable server error without changing the timer', async () => {

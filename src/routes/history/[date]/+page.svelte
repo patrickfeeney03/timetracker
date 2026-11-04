@@ -5,7 +5,7 @@
 	import SessionForm from '$lib/components/SessionForm.svelte';
 	import { formatDateLong, formatDuration, formatLocalTime } from '$lib/format';
 	import { createSubmitHandler } from '$lib/forms';
-	import type { ActionFormResult } from '$lib/types';
+	import type { ActionFormResult, TagView } from '$lib/types';
 
 	const data = $derived(page.data);
 	// Action results live on `page.form`, not inside load data.
@@ -67,7 +67,17 @@
 			{#each data.entries as entry (entry.id)}
 				<li class="session-item" data-testid="session-item">
 					<div>
-						<div class="session-time">
+						{#if entry.name}
+							<div class="session-name" data-testid="session-name">{entry.name}</div>
+						{/if}
+						{#if entry.tags.length > 0}
+							<ul class="tag-list" aria-label="Tags">
+								{#each entry.tags as tag (tag.id)}
+									<li class="tag-chip is-static" data-testid="session-tag">{tag.name}</li>
+								{/each}
+							</ul>
+						{/if}
+						<div class="session-time" class:is-secondary={entry.name}>
 							{formatLocalTime(entry.startLocal)} – {entry.endLocal
 								? formatLocalTime(entry.endLocal)
 								: 'now'}
@@ -121,6 +131,9 @@
 							start={entry.startLocal}
 							end={entry.endLocal ?? entry.startLocal}
 							timeZone={entry.timeZone}
+							name={entry.name}
+							tags={data.tags}
+							tagIds={entry.tags.map((tag: TagView) => tag.id)}
 							deviceTimeZone={data.deviceTimeZone}
 							error={editError(entry.id)}
 							onCancel={() => (editingId = null)}
@@ -137,6 +150,7 @@
 			start={data.addDefaults.start}
 			end={data.addDefaults.end}
 			timeZone={data.addDefaults.timeZone}
+			tags={data.tags}
 			deviceTimeZone={data.deviceTimeZone}
 			error={form?.action === 'add' ? (form.error ?? null) : null}
 		/>
