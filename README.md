@@ -1,5 +1,7 @@
 # Work Time Tracker
 
+<img width="750" alt="image" src="https://github.com/user-attachments/assets/4f6db44b-f659-4288-8352-a6c4b01ae7e3" />
+
 A personal, server-authoritative work-time tracker built with SvelteKit 5, deployed as
 a full-stack Cloudflare Worker with Static Assets, D1 and Better Auth (Google OAuth).
 
