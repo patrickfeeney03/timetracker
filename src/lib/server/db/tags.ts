@@ -1,20 +1,31 @@
 import { and, asc, eq, inArray, isNull, or, sql, type SQL } from 'drizzle-orm';
 import type { BatchItem } from 'drizzle-orm/batch';
-import type { TagSelection } from '$lib/labels';
+import { TAG_COLOR_COUNT, type TagSelection } from '$lib/labels';
+import type { TagView } from '$lib/types';
 import type { Db } from './index';
 import { tag, workSession, workSessionTag } from './schema';
 import { overlapsRange } from './conditions';
 
-export type TagRow = { id: string; name: string };
+export type TagRow = TagView;
 export type TagLink = { sessionId: string; tagId: string };
 
-/** Every tag the user has made, alphabetically. */
-export function listTags(db: Db, userId: string): Promise<TagRow[]> {
-	return db
-		.select({ id: tag.id, name: tag.name })
+/**
+ * Every tag the user has made, alphabetically, each with its palette slot.
+ * Slots follow creation order (tags made together tie-break on id), so they
+ * stay put as tags are added.
+ */
+export async function listTags(db: Db, userId: string): Promise<TagRow[]> {
+	const rows = await db
+		.select({ id: tag.id, name: tag.name, createdAt: tag.createdAt })
 		.from(tag)
 		.where(eq(tag.userId, userId))
 		.orderBy(asc(sql`lower(${tag.name})`));
+
+	const byAge = [...rows].sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id));
+	const slots = new Map(
+		byAge.map((row, index) => [row.id, index < TAG_COLOR_COUNT ? index : null])
+	);
+	return rows.map(({ id, name }) => ({ id, name, color: slots.get(id) ?? null }));
 }
 
 /** Tag links for the user's sessions that match `sessionWhere`. */

@@ -28,8 +28,8 @@ describe('SessionForm.svelte', () => {
 			sessionId: 'session-1',
 			name: 'Code review',
 			tags: [
-				{ id: 'tag-coding', name: 'coding' },
-				{ id: 'tag-reading', name: 'reading' }
+				{ id: 'tag-coding', name: 'coding', color: 0 },
+				{ id: 'tag-reading', name: 'reading', color: 1 }
 			],
 			tagIds: ['tag-coding']
 		});

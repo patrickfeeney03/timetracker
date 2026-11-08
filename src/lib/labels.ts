@@ -7,6 +7,18 @@ export const SESSION_NAME_MAX_LENGTH = 200;
 export const TAG_NAME_MAX_LENGTH = 40;
 export const MAX_TAGS_PER_SESSION = 10;
 
+/**
+ * Tags take the categorical palette slots in `app.css` (`--tag-1`…) in the
+ * order they were created, so a new tag never repaints older ones. Slots are
+ * never reused: later tags share the neutral `--tag-other`.
+ */
+export const TAG_COLOR_COUNT = 8;
+
+/** The CSS color for a tag's palette slot (`null` is the shared "other"). */
+export function tagColorVar(slot: number | null): string {
+	return slot === null ? 'var(--tag-other)' : `var(--tag-${slot + 1})`;
+}
+
 export type LabelError = { ok: false; field: 'name' | 'tags'; message: string };
 
 /** Trims a submitted name. Blank becomes `null` (unnamed). */

@@ -27,7 +27,9 @@ a full-stack Cloudflare Worker with Static Assets, D1 and Better Auth (Google OA
   Names and tags can be set before starting, changed while the timer runs (Save,
   or Enter) and edited in history. Unsaved changes are kept when you pause, and the
   next Start/Resume is pre-filled with the last session's name and tags until you
-  change them or press Clear. Each calendar day shows its tags, most time first.
+  change them or press Clear. Each calendar day shows its tags, most time first
+  (as colored dots on phones), and a legend under the calendar totals each tag
+  for the month. Tags keep a fixed color from an 8-slot palette, by creation order.
 - Refreshes authoritative state after mutations and when the tab regains focus
   or becomes visible, so another device's changes appear without WebSockets or
   background polling.

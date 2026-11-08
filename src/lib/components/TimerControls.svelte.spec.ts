@@ -7,8 +7,8 @@ const base = {
 	serverNow: Date.now(),
 	deviceTimeZone: 'Europe/Berlin',
 	tags: [
-		{ id: 'tag-coding', name: 'coding' },
-		{ id: 'tag-reading', name: 'reading' }
+		{ id: 'tag-coding', name: 'coding', color: 0 },
+		{ id: 'tag-reading', name: 'reading', color: 1 }
 	],
 	form: null,
 	previous: null

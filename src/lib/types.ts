@@ -5,8 +5,11 @@ export type CalendarDay = {
 	durationMs: number;
 	isRunning: boolean;
 	/** Tags on the sessions that contributed time, most time first. */
-	tags: TagView[];
+	tags: TagTime[];
 };
+
+/** A tag with the time it covers in some range. */
+export type TagTime = TagView & { durationMs: number };
 
 /** The latest finished session's labels, offered again when resuming. */
 export type PreviousLabelsView = {
@@ -27,6 +30,8 @@ export type ActiveSessionView = {
 export type TagView = {
 	id: string;
 	name: string;
+	/** Palette slot by creation order, or `null` past the palette (see `$lib/labels`). */
+	color: number | null;
 };
 
 export type SessionEntry = {

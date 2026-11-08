@@ -82,7 +82,12 @@
 			</div>
 		</div>
 
-		<Calendar month={data.month} days={data.days} todayKey={data.todayKey} />
+		<Calendar
+			month={data.month}
+			days={data.days}
+			tagTotals={data.tagTotals}
+			todayKey={data.todayKey}
+		/>
 
 		<p class="muted small" style="margin: 0.9rem 0 0;">
 			Daily totals are derived from exact session timestamps and floored to whole minutes only for

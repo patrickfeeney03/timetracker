@@ -572,6 +572,33 @@ describe('tags', () => {
 		expect(await listTags(db, USER_A)).toHaveLength(1);
 	});
 
+	it('gives tags palette slots in creation order, and none past the palette', async () => {
+		for (const [index, name] of ['zeta', 'alpha', 'mid'].entries()) {
+			await addManualSession(context(USER_A, BASE + index), {
+				startLocal: `2026-09-1${index}T09:00`,
+				endLocal: `2026-09-1${index}T10:00`,
+				timeZone: 'UTC',
+				...newTags(name)
+			});
+		}
+		// Six more in one go: they share a creation time and still get distinct slots.
+		await addManualSession(context(USER_A, BASE + 10), {
+			startLocal: '2026-09-15T09:00',
+			endLocal: '2026-09-15T10:00',
+			timeZone: 'UTC',
+			...newTags('t1, t2, t3, t4, t5, t6')
+		});
+
+		const tags = await listTags(db, USER_A);
+		const slotOf = new Map(tags.map((row) => [row.name, row.color]));
+		// Listed alphabetically, coloured by age.
+		expect(tags.slice(0, 3).map((row) => row.name)).toEqual(['alpha', 'mid', 't1']);
+		expect([slotOf.get('zeta'), slotOf.get('alpha'), slotOf.get('mid')]).toEqual([0, 1, 2]);
+		const batchSlots = ['t1', 't2', 't3', 't4', 't5', 't6'].map((name) => slotOf.get(name));
+		expect(batchSlots.filter((slot) => slot === null)).toHaveLength(1);
+		expect(new Set(batchSlots.filter((slot) => slot !== null))).toEqual(new Set([3, 4, 5, 6, 7]));
+	});
+
 	it('lets each user have a tag with the same name', async () => {
 		await startTimer(context(USER_A), 'UTC', newTags('reading'));
 		await startTimer(context(USER_B), 'UTC', newTags('reading'));

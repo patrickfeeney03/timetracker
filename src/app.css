@@ -18,6 +18,18 @@
 	--success: #55c98d;
 	--success-soft: rgba(85, 201, 141, 0.12);
 	--warning: #e8b45f;
+	/* Categorical tag palette (see TAG_COLOR_COUNT in src/lib/labels.ts). The
+	   order is validated for colour-blind separation between neighbours in both
+	   themes; keep it. Tag names are always shown in text colours beside these. */
+	--tag-1: #3987e5;
+	--tag-2: #d95926;
+	--tag-3: #199e70;
+	--tag-4: #c98500;
+	--tag-5: #d55181;
+	--tag-6: #008300;
+	--tag-7: #9085e9;
+	--tag-8: #e66767;
+	--tag-other: var(--faint);
 	--radius: 12px;
 	--radius-sm: 8px;
 	--shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.25);
@@ -41,6 +53,14 @@
 		--accent: #2f6fd8;
 		--accent-strong: #2258b8;
 		--accent-soft: rgba(47, 111, 216, 0.1);
+		--tag-1: #2a78d6;
+		--tag-2: #eb6834;
+		--tag-3: #1baf7a;
+		--tag-4: #eda100;
+		--tag-5: #e87ba4;
+		--tag-6: #008300;
+		--tag-7: #6250d6;
+		--tag-8: #e34948;
 		--shadow: 0 1px 2px rgba(20, 30, 50, 0.06), 0 8px 24px rgba(20, 30, 50, 0.08);
 	}
 }
@@ -584,6 +604,14 @@ input[type='text'].tag-new {
 	font-variant-numeric: tabular-nums;
 }
 
+.tag-dot {
+	flex: none;
+	width: 0.45rem;
+	height: 0.45rem;
+	border-radius: 50%;
+	background: var(--tag-color, var(--tag-other));
+}
+
 .calendar-tags {
 	display: flex;
 	flex-wrap: wrap;
@@ -593,32 +621,63 @@ input[type='text'].tag-new {
 }
 
 .calendar-tag {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.25rem;
 	max-width: 100%;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 	border-radius: 999px;
-	padding: 0 0.4rem;
+	padding: 0 0.4rem 0 0.3rem;
 	font-size: 0.68rem;
 	font-weight: 550;
-	line-height: 1.35;
-	background: var(--accent-soft);
-	color: var(--accent);
-}
-
-.calendar-tag.is-more {
+	line-height: 1.4;
 	background: var(--surface-2);
 	color: var(--muted);
 }
 
-.calendar-day.is-outside .calendar-tag {
+.calendar-tag.is-more {
+	padding: 0 0.4rem;
+	color: var(--faint);
+}
+
+.calendar-dots {
+	display: none;
+	flex-wrap: wrap;
+	gap: 0.1rem;
+	margin-top: 0.15rem;
+}
+
+.calendar-day.is-outside :is(.calendar-tag, .tag-dot) {
 	opacity: 0.6;
 }
 
-@media (min-width: 561px) {
-	.calendar-tag.is-narrow-only {
-		display: none;
-	}
+.calendar-legend {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.35rem 1rem;
+	list-style: none;
+	margin: 0.9rem 0 0;
+	padding: 0.75rem 0 0;
+	border-top: 1px solid var(--border);
+	font-size: 0.82rem;
+}
+
+.calendar-legend-item {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.4rem;
+	min-width: 0;
+}
+
+.calendar-legend-name {
+	color: var(--text);
+}
+
+.calendar-legend-time {
+	color: var(--muted);
+	font-variant-numeric: tabular-nums;
 }
 
 .calendar-running {
@@ -853,13 +912,18 @@ input[type='text'].tag-new {
 		padding: 0.35rem;
 	}
 
-	.calendar-tag {
-		padding: 0 0.2rem;
-		font-size: 0.6rem;
+	.calendar-tags {
+		display: none;
 	}
 
-	.calendar-tag.is-wide-only {
-		display: none;
+	/* Three dots stay on one line down to a 360px-wide phone (cells ~24.7px). */
+	.calendar-dots {
+		display: flex;
+	}
+
+	.calendar-dots .tag-dot {
+		width: 0.4rem;
+		height: 0.4rem;
 	}
 
 	.session-item {

@@ -1,5 +1,5 @@
 import { fail } from '@sveltejs/kit';
-import { buildCalendarDays } from '$lib/server/calendar';
+import { buildCalendarDays, monthTagTotals } from '$lib/server/calendar';
 import {
 	getActiveSession,
 	getLatestFinishedLabels,
@@ -53,6 +53,7 @@ export const load: PageServerLoad = async ({ locals, platform, cookies, url }) =
 		activeSession && !monthSessions.some((session) => session.id === activeSession.id)
 			? [activeSession, ...monthSessions]
 			: monthSessions;
+	const days = buildCalendarDays(gridDates, intervals, tagsBySession, nowMs);
 
 	return {
 		serverNow: nowMs,
@@ -76,7 +77,8 @@ export const load: PageServerLoad = async ({ locals, platform, cookies, url }) =
 		previousMonth: shiftMonth(month, -1),
 		nextMonth: shiftMonth(month, 1),
 		currentMonth: todayKey.slice(0, 7),
-		days: buildCalendarDays(gridDates, intervals, tagsBySession, nowMs)
+		days,
+		tagTotals: monthTagTotals(days, month)
 	};
 };
 
