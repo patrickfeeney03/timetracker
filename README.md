@@ -25,7 +25,9 @@ a full-stack Cloudflare Worker with Static Assets, D1 and Better Auth (Google OA
   any number of reusable tags such as `reading` or `coding`. Tags are created by
   typing a new name (comma-separated for several) and then appear as toggle chips.
   Names and tags can be set before starting, changed while the timer runs (Save,
-  or Enter) and edited in history. Unsaved changes are kept when you pause.
+  or Enter) and edited in history. Unsaved changes are kept when you pause, and the
+  next Start/Resume is pre-filled with the last session's name and tags until you
+  change them or press Clear. Each calendar day shows its tags, most time first.
 - Refreshes authoritative state after mutations and when the tab regains focus
   or becomes visible, so another device's changes appear without WebSockets or
   background polling.

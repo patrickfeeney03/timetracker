@@ -10,7 +10,8 @@ const base = {
 		{ id: 'tag-coding', name: 'coding' },
 		{ id: 'tag-reading', name: 'reading' }
 	],
-	form: null
+	form: null,
+	previous: null
 };
 
 describe('TimerControls.svelte', () => {
@@ -124,6 +125,37 @@ describe('TimerControls.svelte', () => {
 		await expect.element(page.getByRole('checkbox', { name: 'coding' })).not.toBeChecked();
 		await expect.element(page.getByRole('checkbox', { name: 'reading' })).not.toBeChecked();
 		await expect.element(page.getByTestId('timer-new-tag')).toHaveValue('');
+	});
+
+	it('pre-fills the last session\u2019s name and tags when resuming', async () => {
+		await render(TimerControls, {
+			...base,
+			active: null,
+			todayTotalMs: 60_000,
+			previous: { id: 'session-0', name: 'Thesis', tagIds: ['tag-reading'] }
+		});
+
+		await expect.element(page.getByTestId('session-name')).toHaveValue('Thesis');
+		await expect.element(page.getByRole('checkbox', { name: 'reading' })).toBeChecked();
+		await expect.element(page.getByRole('checkbox', { name: 'coding' })).not.toBeChecked();
+	});
+
+	it('clears the pre-filled labels so the next session starts blank', async () => {
+		await render(TimerControls, {
+			...base,
+			active: null,
+			todayTotalMs: 60_000,
+			previous: { id: 'session-0', name: 'Thesis', tagIds: ['tag-reading'] }
+		});
+
+		const clear = page.getByTestId('clear-labels');
+		await clear.click();
+		await expect.element(page.getByTestId('session-name')).toHaveValue('');
+		await expect.element(page.getByRole('checkbox', { name: 'reading' })).not.toBeChecked();
+		await expect.element(clear).toBeDisabled();
+
+		await page.getByTestId('timer-new-tag').fill('notes');
+		await expect.element(clear).toBeEnabled();
 	});
 
 	it('surfaces a retryable server error without changing the timer', async () => {

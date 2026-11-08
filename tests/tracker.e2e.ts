@@ -124,11 +124,11 @@ test('names a session when starting, renames it while running and keeps it in hi
 	await page.reload();
 	await expect(page.getByTestId('session-name')).toHaveValue('Release notes');
 
-	// An unsaved edit is kept when pausing.
+	// An unsaved edit is kept when pausing, and offered again for the resume.
 	await page.getByTestId('session-name').fill('Release notes v2');
 	await page.getByTestId('pause-button').click();
 	await expect(page.getByTestId('start-button')).toHaveText('Resume');
-	await expect(page.getByTestId('session-name')).toHaveValue('');
+	await expect(page.getByTestId('session-name')).toHaveValue('Release notes v2');
 
 	const today = await page
 		.getByTestId('calendar-day')
@@ -183,6 +183,48 @@ test('creates tags, reuses them across sessions and shows them in history', asyn
 	await expect(items).toHaveCount(2);
 	await expect(items.nth(0).getByTestId('session-tag')).toHaveText(['coding']);
 	await expect(items.nth(1).getByTestId('session-tag')).toHaveText(['coding', 'reading']);
+});
+
+test('resuming keeps the last name and tags until cleared, and the calendar shows tags', async ({
+	page
+}) => {
+	await signIn(page);
+	await page.goto('/');
+
+	await page.getByTestId('session-name').fill('Thesis');
+	await page.getByTestId('timer-new-tag').fill('writing');
+	await page.getByTestId('start-button').click();
+	await expect(page.getByTestId('pause-button')).toBeVisible();
+	await page.getByTestId('pause-button').click();
+	await expect(page.getByTestId('start-button')).toHaveText('Resume');
+
+	// The labels come from the server, so they survive a reload too.
+	await page.reload();
+	await expect(page.getByTestId('session-name')).toHaveValue('Thesis');
+	await expect(page.getByRole('checkbox', { name: 'writing' })).toBeChecked();
+
+	const today = page.getByTestId('calendar-day').and(page.locator('.is-today'));
+	await expect(today.getByTestId('calendar-tag')).toHaveText(['writing']);
+
+	await page.getByTestId('start-button').click();
+	await expect(page.getByTestId('pause-button')).toBeVisible();
+	await expect(page.getByTestId('session-name')).toHaveValue('Thesis');
+	await expect(page.getByRole('checkbox', { name: 'writing' })).toBeChecked();
+	await page.getByTestId('pause-button').click();
+	await expect(page.getByTestId('start-button')).toHaveText('Resume');
+
+	// Clearing starts the next session blank, and blank is then what carries over.
+	await page.getByTestId('clear-labels').click();
+	await expect(page.getByTestId('session-name')).toHaveValue('');
+	await expect(page.getByRole('checkbox', { name: 'writing' })).not.toBeChecked();
+	await page.getByTestId('start-button').click();
+	await expect(page.getByTestId('pause-button')).toBeVisible();
+	await expect(page.getByRole('checkbox', { name: 'writing' })).not.toBeChecked();
+	await page.getByTestId('pause-button').click();
+	await expect(page.getByTestId('start-button')).toHaveText('Resume');
+	await expect(page.getByTestId('session-name')).toHaveValue('');
+	await expect(page.getByRole('checkbox', { name: 'writing' })).not.toBeChecked();
+	await expect(today.getByTestId('calendar-tag')).toHaveText(['writing']);
 });
 
 test('a second device sees the running timer after focus refresh', async ({ browser }) => {

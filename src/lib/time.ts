@@ -138,31 +138,42 @@ export function splitIntervalByLocalDays(
 	return slices;
 }
 
+/**
+ * Every interval's exact contribution to each date it touches, grouped by
+ * date in input order. Open intervals end at `nowMs`.
+ */
+export function contributionsByDay<T extends Interval>(
+	intervals: T[],
+	nowMs: number
+): Map<string, DayContribution<T>[]> {
+	const byDay = new Map<string, DayContribution<T>[]>();
+
+	for (const interval of intervals) {
+		const endMs = interval.endedAt ?? nowMs;
+		for (const slice of splitSafely(interval.startedAt, endMs, interval.timeZone)) {
+			const contribution = { interval, durationMs: slice.durationMs };
+			const existing = byDay.get(slice.date);
+			if (existing) existing.push(contribution);
+			else byDay.set(slice.date, [contribution]);
+		}
+	}
+
+	return byDay;
+}
+
 /** Derives per-date totals from intervals. Open intervals end at `nowMs`. */
 export function summarizeByDay<T extends Interval>(
 	intervals: T[],
 	nowMs: number
 ): Map<string, DaySummary> {
 	const summaries = new Map<string, DaySummary>();
-
-	for (const interval of intervals) {
-		const endMs = interval.endedAt ?? nowMs;
-		const isRunning = interval.endedAt === null;
-		for (const slice of splitSafely(interval.startedAt, endMs, interval.timeZone)) {
-			const existing = summaries.get(slice.date);
-			if (existing) {
-				existing.durationMs += slice.durationMs;
-				existing.isRunning ||= isRunning;
-			} else {
-				summaries.set(slice.date, {
-					date: slice.date,
-					durationMs: slice.durationMs,
-					isRunning
-				});
-			}
-		}
+	for (const [date, contributions] of contributionsByDay(intervals, nowMs)) {
+		summaries.set(date, {
+			date,
+			durationMs: contributions.reduce((sum, { durationMs }) => sum + durationMs, 0),
+			isRunning: contributions.some(({ interval }) => interval.endedAt === null)
+		});
 	}
-
 	return summaries;
 }
 
@@ -172,15 +183,7 @@ export function contributionsForDate<T extends Interval>(
 	date: string,
 	nowMs: number
 ): DayContribution<T>[] {
-	const contributions: DayContribution<T>[] = [];
-	for (const interval of intervals) {
-		const endMs = interval.endedAt ?? nowMs;
-		for (const slice of splitSafely(interval.startedAt, endMs, interval.timeZone)) {
-			if (slice.date === date) {
-				contributions.push({ interval, durationMs: slice.durationMs });
-			}
-		}
-	}
+	const contributions = contributionsByDay(intervals, nowMs).get(date) ?? [];
 	return contributions.sort((a, b) => a.interval.startedAt - b.interval.startedAt);
 }
 

@@ -584,6 +584,43 @@ input[type='text'].tag-new {
 	font-variant-numeric: tabular-nums;
 }
 
+.calendar-tags {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.2rem;
+	min-width: 0;
+	margin-top: 0.1rem;
+}
+
+.calendar-tag {
+	max-width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	border-radius: 999px;
+	padding: 0 0.4rem;
+	font-size: 0.68rem;
+	font-weight: 550;
+	line-height: 1.35;
+	background: var(--accent-soft);
+	color: var(--accent);
+}
+
+.calendar-tag.is-more {
+	background: var(--surface-2);
+	color: var(--muted);
+}
+
+.calendar-day.is-outside .calendar-tag {
+	opacity: 0.6;
+}
+
+@media (min-width: 561px) {
+	.calendar-tag.is-narrow-only {
+		display: none;
+	}
+}
+
 .calendar-running {
 	position: absolute;
 	top: 0.55rem;
@@ -814,6 +851,15 @@ input[type='text'].tag-new {
 	.calendar-day {
 		min-height: 3.6rem;
 		padding: 0.35rem;
+	}
+
+	.calendar-tag {
+		padding: 0 0.2rem;
+		font-size: 0.6rem;
+	}
+
+	.calendar-tag.is-wide-only {
+		display: none;
 	}
 
 	.session-item {

@@ -56,6 +56,7 @@
 
 	<TimerControls
 		active={data.activeSession}
+		previous={data.previousLabels}
 		todayTotalMs={data.todayTotalMs}
 		serverNow={data.serverNow}
 		deviceTimeZone={data.deviceTimeZone}

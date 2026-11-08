@@ -4,6 +4,15 @@ export type CalendarDay = {
 	date: string;
 	durationMs: number;
 	isRunning: boolean;
+	/** Tags on the sessions that contributed time, most time first. */
+	tags: TagView[];
+};
+
+/** The latest finished session's labels, offered again when resuming. */
+export type PreviousLabelsView = {
+	id: string;
+	name: string | null;
+	tagIds: string[];
 };
 
 export type ActiveSessionView = {

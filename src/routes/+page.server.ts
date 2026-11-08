@@ -1,6 +1,11 @@
 import { fail } from '@sveltejs/kit';
-import { getActiveSession, listSessionsOverlapping } from '$lib/server/db/sessions';
-import { listActiveTagLinks, listTags } from '$lib/server/db/tags';
+import { buildCalendarDays } from '$lib/server/calendar';
+import {
+	getActiveSession,
+	getLatestFinishedLabels,
+	listSessionsOverlapping
+} from '$lib/server/db/sessions';
+import { groupTagsBySession, listTagLinksOverlapping, listTags } from '$lib/server/db/tags';
 import { requireUser } from '$lib/server/guards';
 import { readLabels } from '$lib/server/sessions/form';
 import { pauseTimer, startTimer, updateSessionLabels } from '$lib/server/sessions/service';
@@ -35,25 +40,25 @@ export const load: PageServerLoad = async ({ locals, platform, cookies, url }) =
 	const queryFromMs = Date.parse(`${gridDates[0]}T00:00:00Z`) - 2 * DAY_MS;
 	const queryToMs = Date.parse(`${gridDates[gridDates.length - 1]}T00:00:00Z`) + 3 * DAY_MS;
 
-	const [monthSessions, activeSession, tags, activeTagLinks] = await Promise.all([
+	const [monthSessions, activeSession, tags, tagLinks, previousLabels] = await Promise.all([
 		listSessionsOverlapping(db, user.id, queryFromMs, queryToMs),
 		getActiveSession(db, user.id),
 		listTags(db, user.id),
-		listActiveTagLinks(db, user.id)
+		listTagLinksOverlapping(db, user.id, queryFromMs, queryToMs),
+		getLatestFinishedLabels(db, user.id)
 	]);
+	const tagsBySession = groupTagsBySession(tagLinks, tags);
 
 	const intervals =
 		activeSession && !monthSessions.some((session) => session.id === activeSession.id)
 			? [activeSession, ...monthSessions]
 			: monthSessions;
 
-	const summaries = summarizeByDay(intervals, nowMs);
-
 	return {
 		serverNow: nowMs,
 		deviceTimeZone,
 		todayKey,
-		todayTotalMs: summaries.get(todayKey)?.durationMs ?? 0,
+		todayTotalMs: summarizeByDay(intervals, nowMs).get(todayKey)?.durationMs ?? 0,
 		timerRunning: activeSession !== undefined,
 		activeSession: activeSession
 			? {
@@ -61,17 +66,17 @@ export const load: PageServerLoad = async ({ locals, platform, cookies, url }) =
 					startedLocal: epochMsToLocalDateTime(activeSession.startedAt, activeSession.timeZone),
 					timeZone: activeSession.timeZone,
 					name: activeSession.name,
-					tagIds: activeTagLinks
-						.filter((link) => link.sessionId === activeSession.id)
-						.map((link) => link.tagId)
+					tagIds: (tagsBySession.get(activeSession.id) ?? []).map((tag) => tag.id)
 				}
 			: null,
+		// Offered on the start form so a resume keeps the same name and tags.
+		previousLabels: previousLabels ?? null,
 		tags,
 		month,
 		previousMonth: shiftMonth(month, -1),
 		nextMonth: shiftMonth(month, 1),
 		currentMonth: todayKey.slice(0, 7),
-		days: gridDates.map((date) => summaries.get(date) ?? { date, durationMs: 0, isRunning: false })
+		days: buildCalendarDays(gridDates, intervals, tagsBySession, nowMs)
 	};
 };
 

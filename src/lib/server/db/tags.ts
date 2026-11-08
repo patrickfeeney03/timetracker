@@ -26,11 +26,6 @@ export function listTagLinks(db: Db, userId: string, sessionWhere: SQL): Promise
 		.where(and(eq(workSession.userId, userId), sessionWhere));
 }
 
-/** Tag links for the user's running session. */
-export function listActiveTagLinks(db: Db, userId: string): Promise<TagLink[]> {
-	return listTagLinks(db, userId, isNull(workSession.endedAt));
-}
-
 /**
  * Tag links for sessions overlapping `[fromMs, toMs)` plus the running one, so
  * they can be fetched in parallel with those sessions rather than after them.
@@ -42,6 +37,21 @@ export function listTagLinksOverlapping(
 	toMs: number
 ): Promise<TagLink[]> {
 	return listTagLinks(db, userId, or(overlapsRange(fromMs, toMs), isNull(workSession.endedAt))!);
+}
+
+/** Each session's tags, alphabetically. Links to unknown tags are skipped. */
+export function groupTagsBySession(links: TagLink[], tags: TagRow[]): Map<string, TagRow[]> {
+	const tagsById = new Map(tags.map((row) => [row.id, row]));
+	const bySession = new Map<string, TagRow[]>();
+	for (const link of links) {
+		const row = tagsById.get(link.tagId);
+		if (!row) continue;
+		const existing = bySession.get(link.sessionId);
+		if (existing) existing.push(row);
+		else bySession.set(link.sessionId, [row]);
+	}
+	for (const rows of bySession.values()) rows.sort((a, b) => a.name.localeCompare(b.name));
+	return bySession;
 }
 
 /**

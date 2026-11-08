@@ -3,7 +3,12 @@
 	import { createSubmitHandler } from '$lib/forms';
 	import { formatLocalTime } from '$lib/format';
 	import { SESSION_NAME_MAX_LENGTH } from '$lib/labels';
-	import type { ActiveSessionView, ActionFormResult, TagView } from '$lib/types';
+	import type {
+		ActiveSessionView,
+		ActionFormResult,
+		PreviousLabelsView,
+		TagView
+	} from '$lib/types';
 	import type { SubmitFunction } from '@sveltejs/kit';
 	import { onMount } from 'svelte';
 	import LiveTimer from './LiveTimer.svelte';
@@ -11,6 +16,8 @@
 
 	type Props = {
 		active: ActiveSessionView | null;
+		/** The latest finished session's labels, pre-filled when resuming. */
+		previous: PreviousLabelsView | null;
 		/** Today's recorded total in ms, including the running session up to `serverNow`. */
 		todayTotalMs: number;
 		serverNow: number;
@@ -20,7 +27,7 @@
 		form: ActionFormResult | null;
 	};
 
-	let { active, todayTotalMs, serverNow, deviceTimeZone, tags, form }: Props = $props();
+	let { active, previous, todayTotalMs, serverNow, deviceTimeZone, tags, form }: Props = $props();
 
 	// The hidden input always carries the device's current IANA zone so a
 	// travelling user gets the new zone captured on the next start.
@@ -31,9 +38,34 @@
 	let pauseSubmitting = $state(false);
 	let renameSubmitting = $state(false);
 
-	// Labels for the next start. Cleared once a start succeeds.
-	let startTags = $state<string[]>([]);
-	let startNewTags = $state('');
+	// Labels for the next start, pre-filled from the latest finished session so
+	// a resume carries on with the same name and tags until they are cleared.
+	// Like the running drafts below, they reset only when that session or its
+	// saved labels change, never on a plain focus refresh.
+	const previousId = $derived(previous?.id ?? null);
+	const previousName = $derived(previous?.name ?? '');
+	const previousTagKey = $derived(previous ? tagKey(previous.tagIds) : '');
+	let startName = $derived.by(() => {
+		void previousId;
+		return previousName;
+	});
+	let startTags = $derived.by(() => {
+		void previousId;
+		return previousTagKey === '' ? [] : previousTagKey.split(',');
+	});
+	let startNewTags = $derived.by(() => {
+		void previousId;
+		return '';
+	});
+	const hasStartLabels = $derived(
+		startName.trim() !== '' || startTags.length > 0 || startNewTags.trim() !== ''
+	);
+
+	function clearStartLabels() {
+		startName = '';
+		startTags = [];
+		startNewTags = '';
+	}
 
 	// The running session's name and tags. Drafts follow the server values but
 	// only reset when those values or the session itself change, so a focus
@@ -68,11 +100,7 @@
 
 	const startHandler = createSubmitHandler({
 		setSubmitting: (value) => (startSubmitting = value),
-		setError: (message) => (localError = message),
-		onSuccess: () => {
-			startTags = [];
-			startNewTags = '';
-		}
+		setError: (message) => (localError = message)
 	});
 	const pauseHandler = createSubmitHandler({
 		setSubmitting: (value) => (pauseSubmitting = value),
@@ -177,15 +205,29 @@
 	{:else}
 		<form method="POST" action="?/start" use:enhance={startHandler} class="timer-form">
 			<input type="hidden" name="timeZone" value={timeZone} />
-			<input
-				type="text"
-				name="name"
-				maxlength={SESSION_NAME_MAX_LENGTH}
-				placeholder="What are you working on? (optional)"
-				aria-label="Session name"
-				autocomplete="off"
-				data-testid="session-name"
-			/>
+			<div class="name-row">
+				<input
+					type="text"
+					name="name"
+					value={startName}
+					oninput={(event) => (startName = event.currentTarget.value)}
+					maxlength={SESSION_NAME_MAX_LENGTH}
+					placeholder="What are you working on? (optional)"
+					aria-label="Session name"
+					autocomplete="off"
+					data-testid="session-name"
+				/>
+				<!-- Not a submit button, so Enter in the name still starts. -->
+				<button
+					class="btn"
+					type="button"
+					onclick={clearStartLabels}
+					disabled={!hasStartLabels || startSubmitting}
+					data-testid="clear-labels"
+				>
+					Clear
+				</button>
+			</div>
 			<TagPicker {tags} bind:selected={startTags} bind:newTags={startNewTags} idPrefix="timer" />
 			<button
 				class="btn btn-primary btn-large btn-block"

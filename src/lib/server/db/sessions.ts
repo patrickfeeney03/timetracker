@@ -1,9 +1,9 @@
-import { and, asc, eq, gt, isNull, lt, ne, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, lt, ne, or, sql } from 'drizzle-orm';
 import type { BatchItem } from 'drizzle-orm/batch';
 import type { TagSelection } from '$lib/labels';
 import { overlapsRange } from './conditions';
 import type { Db } from './index';
-import { workSession } from './schema';
+import { workSession, workSessionTag } from './schema';
 import { replaceTagsStatements } from './tags';
 
 export type WorkSession = typeof workSession.$inferSelect;
@@ -36,6 +36,35 @@ export function getActiveSession(db: Db, userId: string): Promise<WorkSession | 
 		.where(and(eq(workSession.userId, userId), isNull(workSession.endedAt)))
 		.limit(1)
 		.then((rows) => rows[0]);
+}
+
+/**
+ * The name and tag ids of the user's most recently ended session, so a resume
+ * can carry them over. One query: the session and its tag links are joined.
+ */
+export async function getLatestFinishedLabels(
+	db: Db,
+	userId: string
+): Promise<{ id: string; name: string | null; tagIds: string[] } | undefined> {
+	const latest = db
+		.select({ id: workSession.id })
+		.from(workSession)
+		.where(and(eq(workSession.userId, userId), isNotNull(workSession.endedAt)))
+		.orderBy(desc(workSession.endedAt), desc(workSession.startedAt))
+		.limit(1);
+	const rows = await db
+		.select({ id: workSession.id, name: workSession.name, tagId: workSessionTag.tagId })
+		.from(workSession)
+		.leftJoin(workSessionTag, eq(workSessionTag.sessionId, workSession.id))
+		.where(and(eq(workSession.userId, userId), inArray(workSession.id, latest)));
+
+	const first = rows[0];
+	if (!first) return undefined;
+	return {
+		id: first.id,
+		name: first.name,
+		tagIds: rows.flatMap((row) => (row.tagId === null ? [] : [row.tagId]))
+	};
 }
 
 /** Sessions owned by `userId` whose interval overlaps `[fromMs, toMs)`. */

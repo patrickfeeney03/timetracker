@@ -1,6 +1,6 @@
 import { error, fail } from '@sveltejs/kit';
 import { getActiveSession, listSessionsOverlapping } from '$lib/server/db/sessions';
-import { listTagLinksOverlapping, listTags } from '$lib/server/db/tags';
+import { groupTagsBySession, listTagLinksOverlapping, listTags } from '$lib/server/db/tags';
 import { requireUser } from '$lib/server/guards';
 import { readLabels } from '$lib/server/sessions/form';
 import { addManualSession, editSession, removeSession } from '$lib/server/sessions/service';
@@ -37,7 +37,7 @@ export const load: PageServerLoad = async ({ params, locals, platform, cookies }
 		listTags(db, user.id),
 		listTagLinksOverlapping(db, user.id, queryFromMs, queryToMs)
 	]);
-	const tagsById = new Map(tags.map((tag) => [tag.id, tag]));
+	const tagsBySession = groupTagsBySession(tagLinks, tags);
 
 	const intervals =
 		activeSession && !overlapping.some((session) => session.id === activeSession.id)
@@ -55,11 +55,7 @@ export const load: PageServerLoad = async ({ params, locals, platform, cookies }
 				endedAt: interval.endedAt,
 				timeZone: interval.timeZone,
 				name: interval.name,
-				tags: tagLinks
-					.filter((link) => link.sessionId === interval.id)
-					.map((link) => tagsById.get(link.tagId))
-					.filter((tag) => tag !== undefined)
-					.sort((a, b) => a.name.localeCompare(b.name)),
+				tags: tagsBySession.get(interval.id) ?? [],
 				startLocal,
 				endLocal: interval.endedAt === null ? null : endLocal,
 				durationMs,

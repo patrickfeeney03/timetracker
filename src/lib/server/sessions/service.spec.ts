@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { getPlatformProxy } from 'wrangler';
 import { getDb, type Db } from '$lib/server/db';
-import { listSessionsOverlapping } from '$lib/server/db/sessions';
+import { getLatestFinishedLabels, listSessionsOverlapping } from '$lib/server/db/sessions';
 import { tag, user as userTable, workSession, workSessionTag } from '$lib/server/db/schema';
 import { listTags } from '$lib/server/db/tags';
 import {
@@ -596,6 +596,46 @@ describe('removeSession', () => {
 		const own = await removeSession(context(USER_A), added.session.id);
 		expect(own.ok).toBe(true);
 		expect(await db.select().from(workSession)).toHaveLength(0);
+	});
+});
+
+describe('getLatestFinishedLabels', () => {
+	it('returns nothing before any session has ended', async () => {
+		expect(await getLatestFinishedLabels(db, USER_A)).toBeUndefined();
+		await startTimer(context(USER_A), 'UTC', { name: 'Running', ...newTags('reading') });
+		expect(await getLatestFinishedLabels(db, USER_A)).toBeUndefined();
+	});
+
+	it('returns the name and tags of the session that ended last', async () => {
+		const older = await startTimer(context(USER_A, BASE), 'UTC', {
+			name: 'Older',
+			...newTags('reading')
+		});
+		await pauseTimer(context(USER_A, BASE + 1_000));
+		const latest = await startTimer(context(USER_A, BASE + 2_000), 'UTC', {
+			name: 'Thesis',
+			...newTags('writing, coding')
+		});
+		await pauseTimer(context(USER_A, BASE + 3_000));
+		// Still running, so not "finished": it must not be picked.
+		await startTimer(context(USER_A, BASE + 4_000), 'UTC', { name: 'Now' });
+		if (!older.ok || !latest.ok) throw new Error('setup failed');
+
+		const labels = await getLatestFinishedLabels(db, USER_A);
+		const tagNames = new Map((await listTags(db, USER_A)).map((row) => [row.id, row.name]));
+		expect(labels?.id).toBe(latest.session.id);
+		expect(labels?.name).toBe('Thesis');
+		expect(labels?.tagIds.map((id) => tagNames.get(id)).sort()).toEqual(['coding', 'writing']);
+	});
+
+	it('returns an unnamed, untagged session as such, and ignores other users', async () => {
+		await startTimer(context(USER_A, BASE), 'UTC');
+		await pauseTimer(context(USER_A, BASE + 1_000));
+		await startTimer(context(USER_B, BASE + 2_000), 'UTC', { name: 'Theirs' });
+		await pauseTimer(context(USER_B, BASE + 3_000));
+
+		const labels = await getLatestFinishedLabels(db, USER_A);
+		expect(labels).toMatchObject({ name: null, tagIds: [] });
 	});
 });
 
