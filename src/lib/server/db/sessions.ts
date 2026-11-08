@@ -46,17 +46,21 @@ export async function getLatestFinishedLabels(
 	db: Db,
 	userId: string
 ): Promise<{ id: string; name: string | null; tagIds: string[] } | undefined> {
+	// Reads the newest entry of the (user_id, ended_at) index. Finished sessions
+	// never overlap, so two can only share an end if one is zero-length.
 	const latest = db
 		.select({ id: workSession.id })
 		.from(workSession)
 		.where(and(eq(workSession.userId, userId), isNotNull(workSession.endedAt)))
-		.orderBy(desc(workSession.endedAt), desc(workSession.startedAt))
+		.orderBy(desc(workSession.endedAt))
 		.limit(1);
+	// The subquery is already owner-scoped. Filtering on the user again here
+	// would make SQLite scan every session of the user instead of one id lookup.
 	const rows = await db
 		.select({ id: workSession.id, name: workSession.name, tagId: workSessionTag.tagId })
 		.from(workSession)
 		.leftJoin(workSessionTag, eq(workSessionTag.sessionId, workSession.id))
-		.where(and(eq(workSession.userId, userId), inArray(workSession.id, latest)));
+		.where(inArray(workSession.id, latest));
 
 	const first = rows[0];
 	if (!first) return undefined;
